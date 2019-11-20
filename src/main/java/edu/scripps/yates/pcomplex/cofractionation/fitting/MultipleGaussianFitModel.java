@@ -1,5 +1,7 @@
 package edu.scripps.yates.pcomplex.cofractionation.fitting;
 
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 
 import org.apache.log4j.Logger;
@@ -13,10 +15,14 @@ import org.jgap.NaturalSelector;
 import org.jgap.impl.DefaultConfiguration;
 import org.jgap.impl.DoubleGene;
 
+import edu.scripps.yates.pcomplex.CoFractionationAnalyzer;
+import edu.scripps.yates.pcomplex.cofractionation.MyGaussianFit;
 import edu.scripps.yates.pcomplex.cofractionation.fitting.gaussian.AbstractMultipleGaussianFit;
 import edu.scripps.yates.pcomplex.cofractionation.fitting.gaussian.MultipleGaussianFit;
+import edu.scripps.yates.pcomplex.util.PComplexUtil;
 import edu.scripps.yates.utilities.progresscounter.ProgressCounter;
 import edu.scripps.yates.utilities.progresscounter.ProgressPrintingType;
+import gnu.trove.list.array.TDoubleArrayList;
 
 /**
  * tries to fit using a genetic alg. the ratio distribution to a mixture of
@@ -111,7 +117,11 @@ public class MultipleGaussianFitModel extends AbstractMultipleFitModel {
 		double previousFitnessValue = 0;
 		int roundsWithNoChange = 0;
 		for (int i = 0; i < getMaxIterations(); i++) {
-			genotype.evolve();
+			try {
+				genotype.evolve();
+			} catch (final IllegalStateException e) {
+				e.printStackTrace();
+			}
 			counter.increment();
 			progress++;
 			final String percentage = counter.printIfNecessary();
@@ -120,13 +130,47 @@ public class MultipleGaussianFitModel extends AbstractMultipleFitModel {
 			}
 
 			final IChromosome bestSolutionSoFar = genotype.getFittestChromosome();
-			final Gene[] best = bestSolutionSoFar.getGenes();
-
+			Gene[] best = bestSolutionSoFar.getGenes();
 			fittedGaussians = FittingUtil.getGaussiansFromGenes(best);
 
-			// modelPlot = new ModelPlot(experimentalData, this);
-			fitnessValue = bestSolutionSoFar.getFitnessValue();
-			rSquare = FittingUtil.calculateR2(fittedGaussians, getExperimentalData());
+			boolean validSolution = true;
+			if (!isValid(fittedGaussians)) {
+				final List<IChromosome> chromosomes = genotype.getPopulation().getChromosomes();
+				Collections.sort(chromosomes, new Comparator<IChromosome>() {
+
+					@Override
+					public int compare(IChromosome o1, IChromosome o2) {
+						final double fit1 = optimizationFunction.getFitnessValue(o1);
+						final double fit2 = optimizationFunction.getFitnessValue(o2);
+						return Double.compare(fit2, fit1);
+					}
+				});
+				int index = 0;
+				IChromosome bestChromosome = chromosomes.get(index);
+				if (bestChromosome == bestSolutionSoFar) {
+					bestChromosome = chromosomes.get(++index);
+				}
+				best = bestChromosome.getGenes();
+				fittedGaussians = FittingUtil.getGaussiansFromGenes(best);
+				while (!isValid(fittedGaussians)) {
+					index++;
+					if (chromosomes.size() == index) {
+						// no valid solution
+						validSolution = false;
+						break;
+					}
+					bestChromosome = chromosomes.get(index);
+					best = bestChromosome.getGenes();
+					fittedGaussians = FittingUtil.getGaussiansFromGenes(best);
+				}
+			}
+			if (validSolution) {
+				// modelPlot = new ModelPlot(experimentalData, this);
+				fitnessValue = bestSolutionSoFar.getFitnessValue();
+				rSquare = FittingUtil.calculateR2(fittedGaussians, getExperimentalData());
+			} else {
+				fitnessValue = 0;
+			}
 			// modelPlot.setrSquared(new double[] { fitnessValue,
 			// leftFlankRSquared });
 
@@ -152,10 +196,31 @@ public class MultipleGaussianFitModel extends AbstractMultipleFitModel {
 
 		log.debug("Returning optimized values  ");
 
-		final ModelPlot model = new ModelPlot(acc, transformExperimentalDataForModelling(getSPCProfile()),
-				transformExperimentalDataForModelling(getRawProfile()), getExperimentalData(), this,
+		final ModelPlot model = new ModelPlot(acc, PComplexUtil.transformExperimentalDataForModelling(getSPCProfile()),
+				PComplexUtil.transformExperimentalDataForModelling(getRawProfile()), getExperimentalData(), this,
 				genotype.getPopulation());
 		return model;
+	}
+
+	private boolean isValid(List<MyGaussianFit> fittedGaussians) {
+		if (fittedGaussians.size() > 1) {
+
+			// do not allow to have a gaussian with less than
+			// SMALLEST_GAUSSIAN_PCT
+			// get all the heights
+			final TDoubleArrayList heights = new TDoubleArrayList();
+			for (final MyGaussianFit myGaussianFit : fittedGaussians) {
+				final double height = FittingUtil.getHeight(myGaussianFit.getFittedParameters());
+				heights.add(height);
+			}
+			final double max = heights.max();
+			final double min = heights.min();
+			final double ratio = min / max;
+			if (ratio < CoFractionationAnalyzer.SMALLEST_GAUSSIAN_PCT) {
+				return false;
+			}
+		}
+		return true;
 	}
 
 	public double getModelB(int gaussianIndex) {

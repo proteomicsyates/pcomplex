@@ -1,6 +1,5 @@
 package edu.scripps.yates.pcomplex.cofractionation.fitting;
 
-import java.util.ArrayList;
 import java.util.List;
 
 import org.jgap.Configuration;
@@ -8,6 +7,7 @@ import org.jgap.InvalidConfigurationException;
 
 import edu.scripps.yates.pcomplex.cofractionation.MyGaussianFit;
 import edu.scripps.yates.pcomplex.cofractionation.fitting.gaussian.AbstractMultipleGaussianFit;
+import edu.scripps.yates.pcomplex.util.PComplexUtil;
 import gnu.trove.list.TDoubleList;
 import gnu.trove.list.TIntList;
 
@@ -25,7 +25,7 @@ public abstract class AbstractMultipleFitModel {
 	protected Double[] fixedStd;
 
 	protected final int numGaussians;
-	private TDoubleList profile;
+	private TDoubleList processedProfile;
 	private List<double[]> experimentalData;
 	protected String acc;
 	private TDoubleList rawProfile;
@@ -44,35 +44,9 @@ public abstract class AbstractMultipleFitModel {
 
 	public abstract AbstractMultipleGaussianFit createOptimizationFunction(Double maxLimit);
 
-	public void setExperimentalData(TDoubleList profile) {
-		this.profile = profile;
+	public void setProcessedProfile(TDoubleList profile) {
+		this.processedProfile = profile;
 
-	}
-
-	protected List<double[]> transformExperimentalDataForModelling(TDoubleList profile) {
-		final List<double[]> ret = new ArrayList<double[]>();
-		int x = 1;
-		for (final double y : profile.toArray()) {
-			final double[] point = new double[2];
-			point[0] = x;
-			point[1] = y;
-			ret.add(point);
-			x++;
-		}
-		return ret;
-	}
-
-	protected List<int[]> transformExperimentalDataForModelling(TIntList profile) {
-		final List<int[]> ret = new ArrayList<int[]>();
-		int x = 1;
-		for (final int y : profile.toArray()) {
-			final int[] point = new int[2];
-			point[0] = x;
-			point[1] = y;
-			ret.add(point);
-			x++;
-		}
-		return ret;
 	}
 
 	protected abstract ModelPlot runFit() throws InvalidConfigurationException;
@@ -122,13 +96,13 @@ public abstract class AbstractMultipleFitModel {
 
 	protected List<double[]> getExperimentalData() {
 		if (experimentalData == null) {
-			experimentalData = transformExperimentalDataForModelling(profile);
+			experimentalData = PComplexUtil.transformExperimentalDataForModelling(processedProfile);
 		}
 		return experimentalData;
 	}
 
-	public TDoubleList getProfile() {
-		return profile;
+	public TDoubleList getProcessedProfile() {
+		return processedProfile;
 	}
 
 	public abstract double getFitnessValue();

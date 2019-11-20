@@ -42,24 +42,26 @@ public class IP2Util {
 		projectFullPath = getProperties(this.propertiesFile).getProperty(IP2_SERVER_PROJECT_BASE_PATH) + "/"
 				+ this.projectName;
 
-//		try {
-//			final List<Project> allProjects = ProjectService.getAllProjects("ip2");
-//			for (final Project project : allProjects) {
-//				final Integer projectID = project.getId();
-//				final List<MspExperiment> allExperiments = ExperimentService.getAllExperiments(projectID);
-//				for (final MspExperiment experiment : allExperiments) {
-//					if (experiment.getId() == 242600) {
-//						final List<DbSearch> dbSearches = experiment.getDbSearch();
-//						for (final DbSearch dbSearch : dbSearches) {
-//							log.info(dbSearch);
-//						}
-//					}
-//				}
-//			}
-//		} catch (final APIException e) {
-//			// TODO Auto-generated catch block
-//			e.printStackTrace();
-//		}
+		// try {
+		// final List<Project> allProjects =
+		// ProjectService.getAllProjects("ip2");
+		// for (final Project project : allProjects) {
+		// final Integer projectID = project.getId();
+		// final List<MspExperiment> allExperiments =
+		// ExperimentService.getAllExperiments(projectID);
+		// for (final MspExperiment experiment : allExperiments) {
+		// if (experiment.getId() == 242600) {
+		// final List<DbSearch> dbSearches = experiment.getDbSearch();
+		// for (final DbSearch dbSearch : dbSearches) {
+		// log.info(dbSearch);
+		// }
+		// }
+		// }
+		// }
+		// } catch (final APIException e) {
+		// // TODO Auto-generated catch block
+		// e.printStackTrace();
+		// }
 	}
 
 	protected Session loginToIP2() throws IOException {
@@ -103,14 +105,23 @@ public class IP2Util {
 			for (final LsEntry lsEntry : ls) {
 				final String experimentName = lsEntry.getFilename();
 				if (experimentName.contains("HEK") || experimentName.contains("hplc") || experimentName.contains("AS")
-						|| experimentName.contains("AJS") || experimentName.startsWith("Cond_")) {
+						|| experimentName.contains("AJS") || experimentName.startsWith("Cond_")
+						|| experimentName.startsWith("PT") || experimentName.startsWith("AJS_MB_SEC")) {
 					experimentNames.add(experimentName);
 				} else {
 					continue;
 				}
 			}
+			if (experimentNames.isEmpty()) {
+				throw new IllegalArgumentException(
+						"Experiment names are not recognized. Come just above this line and modify it accordingly");
+			}
 			for (final String experimentName : experimentNames) {
-//				final int frac = getFractionNumberFromExperimentName(experimentName);
+				if (experimentName.contains("00_")) {
+					log.info(experimentName);
+				}
+				// final int frac =
+				// getFractionNumberFromExperimentName(experimentName);
 				final String searchesPath = projectFullPath + "/" + experimentName + "/search";
 				final Vector<LsEntry> ls2 = sftpChannel.ls(searchesPath);
 				for (final LsEntry lsEntry : ls2) {
@@ -121,7 +132,8 @@ public class IP2Util {
 						for (final LsEntry lsEntry2 : ls3) {
 							final String name2 = lsEntry2.getFilename();
 							if (name2.equals("DTASelect-filter.txt")) {
-								// if the experiment already have a search, take the newest search
+								// if the experiment already have a search, take
+								// the newest search
 								if (ret.containsKey(experimentName)) {
 									String searchPath1 = ret.get(experimentName);
 									searchPath1 = searchPath1.substring(0,
@@ -132,8 +144,11 @@ public class IP2Util {
 											.valueOf(searchPath.substring(searchPath.lastIndexOf("_") + 1));
 									if (searchNumber2 > searchNumber1) {
 										ret.put(experimentName, searchPath + "/DTASelect-filter.txt");
+										log.info("Avoiding to override newer search in " + searchesPath + " where "
+												+ searchNumber2 + " is newer than " + searchNumber1);
 									} else {
-										log.info("Avoiding to override newer search");
+										log.info("Avoiding to override newer search in " + searchesPath + " where "
+												+ searchNumber1 + " is newer than " + searchNumber2);
 									}
 								} else {
 									ret.put(experimentName, searchPath + "/DTASelect-filter.txt");
@@ -201,6 +216,21 @@ public class IP2Util {
 					final String tmp = matcher2.group(1);
 					return Integer.valueOf(tmp);
 				}
+				// such as AJS_MB_SEC_100
+				final Pattern patter3 = Pattern.compile(".*SEC_(\\d+)");
+				final Matcher matcher3 = patter3.matcher(experimentName);
+				if (matcher3.find()) {
+					final String tmp = matcher3.group(1);
+					return Integer.valueOf(tmp);
+				}
+				// such as PT1781S1F16
+				final Pattern patter4 = Pattern.compile("\\w+F(\\d+)");
+				final Matcher matcher4 = patter4.matcher(experimentName);
+				if (matcher4.find()) {
+					final String tmp = matcher4.group(1);
+					return Integer.valueOf(tmp);
+				}
+
 				throw new IllegalArgumentException(
 						"It was not possible to extract fraction number from experiment name: '" + experimentName
 								+ "'");
@@ -211,11 +241,48 @@ public class IP2Util {
 		}
 	}
 
-	public void download(String experimentName, String fullPathToIP2, OutputStream outputStream)
+	public void download(String fullPathToIP2, OutputStream outputStream)
 			throws IOException, JSchException, SftpException {
 		final Session sftpIP2 = loginToIP2();
 		final long bytes = FTPUtils.download(sftpIP2, fullPathToIP2, outputStream, progressMonitor);
 		log.info("File downloaded " + FileUtils.getDescriptiveSizeFromBytes(bytes));
 		sftpIP2.disconnect();
+	}
+
+	public List<String> getFastaFiles(String user) throws IOException, JSchException, SftpException {
+		final List<String> ret = new ArrayList<String>();
+		Session sftpIP2 = null;
+		try {
+			sftpIP2 = loginToIP2();
+
+			final ChannelSftp sftpChannel = FTPUtils.openSFTPChannel(sftpIP2);
+
+			Vector<LsEntry> ls = null;
+			final String path = projectFullPath + user + "/database";
+			try {
+
+				ls = sftpChannel.ls(path);
+				for (final LsEntry lsEntry : ls) {
+					final String fastaFile = lsEntry.getFilename();
+					if (fastaFile.endsWith(".fasta")) {
+						ret.add(path + "/" + fastaFile);
+					} else {
+						continue;
+					}
+				}
+			} catch (final Exception e) {
+				log.warn(e.getMessage());
+				log.warn(user + " has no databases at " + path);
+			}
+			// sftpChannel.get(fullPathInIP2, outputStream);
+			sftpChannel.exit();
+			log.info("Transfer done. " + ret.size() + " fastas");
+
+		} finally {
+			if (sftpIP2 != null) {
+				sftpIP2.disconnect();
+			}
+		}
+		return ret;
 	}
 }

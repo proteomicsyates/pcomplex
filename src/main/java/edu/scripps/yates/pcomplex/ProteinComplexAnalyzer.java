@@ -26,12 +26,13 @@ import org.apache.log4j.Logger;
 import org.proteored.pacom.analysis.charts.HeatChart;
 import org.proteored.pacom.analysis.charts.HeatMapChart;
 
-import com.ipa.ip2.api.exception.APIException;
 import com.jcraft.jsch.JSchException;
 import com.jcraft.jsch.SftpException;
 
 import edu.scripps.yates.annotations.uniprot.UniprotProteinLocalRetriever;
 import edu.scripps.yates.dtaselectparser.DTASelectParser;
+import edu.scripps.yates.dtaselectparser.util.DTASelectPSM;
+import edu.scripps.yates.pcomplex.db.ApidDB;
 import edu.scripps.yates.pcomplex.db.ComplexPortalDB;
 import edu.scripps.yates.pcomplex.db.CoreCorumDB;
 import edu.scripps.yates.pcomplex.db.ProteinComplexDB;
@@ -40,19 +41,24 @@ import edu.scripps.yates.pcomplex.model.Fraction;
 import edu.scripps.yates.pcomplex.model.Protein;
 import edu.scripps.yates.pcomplex.model.ProteinComplex;
 import edu.scripps.yates.pcomplex.model.ProteinComplexExistenceCriteria;
+import edu.scripps.yates.pcomplex.model.ProteinComponent;
 import edu.scripps.yates.pcomplex.model.SeparationExperiment;
 import edu.scripps.yates.pcomplex.util.DataType;
+import edu.scripps.yates.pcomplex.util.GroupingUtil;
 import edu.scripps.yates.pcomplex.util.PComplexUtil;
 import edu.scripps.yates.utilities.annotations.uniprot.UniprotEntryUtil;
 import edu.scripps.yates.utilities.annotations.uniprot.UniprotGeneMapping;
 import edu.scripps.yates.utilities.annotations.uniprot.xml.Entry;
-import edu.scripps.yates.utilities.fasta.FastaParser;
+import edu.scripps.yates.utilities.grouping.GroupablePeptide;
+import edu.scripps.yates.utilities.grouping.ProteinGroup;
 import edu.scripps.yates.utilities.maths.Maths;
 import edu.scripps.yates.utilities.progresscounter.ProgressCounter;
 import edu.scripps.yates.utilities.progresscounter.ProgressPrintingType;
+import edu.scripps.yates.utilities.proteomicsmodel.MSRun;
 import edu.scripps.yates.utilities.sequence.PeptideSequenceProperties;
 import edu.scripps.yates.utilities.util.Pair;
 import edu.scripps.yates.utilities.venndata.VennData;
+import gnu.trove.list.TDoubleList;
 import gnu.trove.list.array.TDoubleArrayList;
 import gnu.trove.list.array.TFloatArrayList;
 import gnu.trove.list.array.TIntArrayList;
@@ -60,22 +66,27 @@ import gnu.trove.map.hash.THashMap;
 import gnu.trove.set.hash.THashSet;
 
 public class ProteinComplexAnalyzer {
+	public static final String AMBIGUOUS_SEPARATOR = "#";
 	private final static Logger log = Logger.getLogger(ProteinComplexAnalyzer.class);
 	public static final String[] projectsNames = { //
-			//// "22_08_18_HEK_293_PCP" //
-			//// , "22_10_12_HEK_293_PCP"//
-			//// , "EvoSep"//
-			// // ,
-			//// , "150mM NaCl Size Exclusion PCP"//
-			//// , "WCX_1" //
-			//// ,
-			"2019_05_17_SEC", //
+			// "22_08_18_HEK_293_PCP" //
+			// , "22_10_12_HEK_293_PCP"//
+			// , "EvoSep", //
+			// ,
+			// "150mM NaCl Size Exclusion PCP", //
+			// "WCX_1", //
+			// ,
+			// "2019_05_17_SEC", //
 			// "PCP_EvoSep_Elite_SEC1", // **
 			// "PCP_EvoSep_VelosPro_WCX1", // **
 			//
-			// "WCX_SEC_Tandem", // **
+			// "WCX_SEC_Tandem", // , // **
 			// "dSEC", // **
-			// "2019_05_17_dSEC" **
+			// "2019_05_17_dSEC" //
+			// "2019_10_14_Mixed_bed_SEC"
+//			"Kirkwood_et_al_Rep1",//
+//			"Kirkwood_et_al_Rep2",//
+			"Kirkwood_et_al_Rep3"//
 	};
 
 	// public static final String[] projectsNames = { //
@@ -83,6 +94,7 @@ public class ProteinComplexAnalyzer {
 	// "FF_Drug_HEK" //
 
 	// };
+	public static String ORGANISM = "Human";
 	private static boolean runOverlapping = false;
 
 	public static String basePath = "Z:\\share\\Salva\\data\\asaviola\\protein complexes";
@@ -90,35 +102,40 @@ public class ProteinComplexAnalyzer {
 	public static final String uniprotReleasesFolder = "Z:\\share\\Salva\\data\\uniprotKB";
 	private static int defaultMinNumComponentsInComplex = 2;
 	private final static DateFormat datef = new SimpleDateFormat("MM-dd-yyyy HH_mm_ss");
-	public static String TAXONOMY;
 	private static DecimalFormat df = new DecimalFormat("#.#");
 	private final int minNumComponentsInComplex;
 	private ProteinComplexExistenceCriteria existenceCriteria;
-	private static final boolean downloadFiles = false;
+
+	/*****************************/
+	/** DOWNLOAD FILES **/
+	/*****************************/
+	private static final boolean downloadFiles = true;
+
+	/**
+	 * REFERENCE DATABASES
+	 */
 	public static boolean useHUMAP = true;
-	public static boolean useComplexPortalDB = false;
+	public static boolean useComplexPortalDB = true;
 	public static boolean useCoreCorumDB = true;
-	private static List<ProteinComplexDB> dbs;
+	public static boolean useAPID = false;
+	/********************/
+
 	private final boolean getUniqueProteinsPerFraction = true;
 
 	//
-	private final boolean generateHeatMapsForAllComplexes = true;
-	private final boolean compareWithProteinComplexDBs = true;
+	private final boolean generateHeatMapsForAllComplexes = false;
+	private final boolean compareWithProteinComplexDBs = false;
 	private final boolean generateHeatMapsForIndividualProteinComplexes = false;
 
-	private UniprotGeneMapping geneMapping;
+	private static UniprotGeneMapping geneMapping;
 	private FileWriter fileWriterForR;
 	private boolean heatmapFolderCreated;
 
-	private static Map<String, String> namesByProjectName = new THashMap<String, String>();
 	private static String experimentNamePattern;
 
 	public static void main(String[] args) {
 		try {
 
-			namesByProjectName.put("PCP_EvoSep_Elite_SEC1", "SEC");
-			namesByProjectName.put("PCP_EvoSep_VelosPro_WCX1", "WCX");
-			namesByProjectName.put("WCX_SEC_Tandem", "WCX_SEC");
 			// basePath = "Z:\\share\\Salva\\data\\jim\\proteinComplexes";
 			downloadFilesPath = basePath + "\\experiments";
 			experimentNamePattern = "Cond_D_Rep_4_";
@@ -130,8 +147,14 @@ public class ProteinComplexAnalyzer {
 				final SeparationExperiment exp = pcan.run(new File(args[0]), projectsName, downloadFiles);
 				exps.add(exp);
 				for (final DataType dataType : DataType.values()) {
-					final File out = exp.exportToCSV(new File(args[0]).getParentFile(), dataType);
+					// this file will be for PRINCE
+					final File out = exp.exportToTextSeparatedValues(new File(args[0]).getParentFile(), dataType, ",",
+							true, false);
 					log.info("File created at: " + out.getAbsolutePath());
+					// and this file will be for EPIC
+					final File out2 = exp.exportToTextSeparatedValues(new File(args[0]).getParentFile(), dataType, "\t",
+							false, dataType == DataType.NSAF);
+					log.info("File created at: " + out2.getAbsolutePath());
 				}
 			}
 			pcan.getFileWriterForR().close();
@@ -164,26 +187,73 @@ public class ProteinComplexAnalyzer {
 		existenceCriteria = proteinComplexExistenceCriteria;
 	}
 
-	public static List<ProteinComplexDB> getDBs() throws IOException {
-		if (dbs == null) {
-			// add to list of DBs
-			dbs = new ArrayList<ProteinComplexDB>();
-			if (useHUMAP) {
+	public static List<ProteinComplexDB> getDBs() {
+		return getDBs(false, -1, -1, -1);
+	}
+
+	public static List<ProteinComplexDB> getDBs(boolean simplify, double maxoverlapscoreinreferenceset,
+			int minComplexSizeInReferenceSetForLearning, int maxComplexSizeInReferenceSetForLearning) {
+
+		// add to list of DBs
+		final ArrayList<ProteinComplexDB> dbs = new ArrayList<ProteinComplexDB>();
+		if (useHUMAP) {
+			try {
 				final ProteinComplexDB proteinComplexesORG = loadHUMapProteinComplexes();
+				if (simplify) {
+					proteinComplexesORG.mergeComplexes(maxoverlapscoreinreferenceset);
+					proteinComplexesORG.filterByComplexSize(minComplexSizeInReferenceSetForLearning,
+							maxComplexSizeInReferenceSetForLearning);
+				}
 				log.info(proteinComplexesORG.getProteinComplexes().size() + " protein complexes in "
 						+ proteinComplexesORG.getName());
 				dbs.add(proteinComplexesORG);
+				ProteinComponent.dbs.add(proteinComplexesORG);
+			} catch (final IOException e) {
+				e.printStackTrace();
 			}
-			if (useComplexPortalDB) {
+		}
+		if (useComplexPortalDB) {
+			try {
 				final ProteinComplexDB complexPortalDB = loadComplexPortalProteinComplexes();
+				if (simplify) {
+					complexPortalDB.mergeComplexes(maxoverlapscoreinreferenceset);
+					complexPortalDB.filterByComplexSize(minComplexSizeInReferenceSetForLearning,
+							maxComplexSizeInReferenceSetForLearning);
+				}
 				log.info(complexPortalDB.getProteinComplexes().size() + " protein complexes in "
 						+ complexPortalDB.getName());
 				dbs.add(complexPortalDB);
+				ProteinComponent.dbs.add(complexPortalDB);
+			} catch (final IOException e) {
+				e.printStackTrace();
 			}
-			if (useCoreCorumDB) {
-				final ProteinComplexDB coreCorumDB = loadCoreCorumProteinComplexes();
+		}
+		if (useCoreCorumDB) {
+			try {
+				final ProteinComplexDB coreCorumDB = loadCoreCorumProteinComplexes(simplify);
+				if (simplify) {
+					coreCorumDB.mergeComplexes(maxoverlapscoreinreferenceset);
+					coreCorumDB.filterByComplexSize(minComplexSizeInReferenceSetForLearning,
+							maxComplexSizeInReferenceSetForLearning);
+				}
 				log.info(coreCorumDB.getProteinComplexes().size() + " protein complexes in " + coreCorumDB.getName());
 				dbs.add(coreCorumDB);
+				ProteinComponent.dbs.add(coreCorumDB);
+			} catch (final IOException e) {
+				e.printStackTrace();
+			}
+		}
+		if (useAPID) {
+			try {
+				// this database is very curated but it is binary, so the
+				// complexes will be interactions between 2 proteins, therefore
+				// the simplification doesn't apply here.
+				final ProteinComplexDB apidDB = loadApidProteinComplexes();
+				log.info(apidDB.getProteinComplexes().size() + " protein complexes in " + apidDB.getName());
+				dbs.add(apidDB);
+				ProteinComponent.dbs.add(apidDB);
+			} catch (final IOException e) {
+				e.printStackTrace();
 			}
 		}
 		return dbs;
@@ -228,15 +298,15 @@ public class ProteinComplexAnalyzer {
 	}
 
 	public ProteinComplexAnalyzer(int minNumComponentsInComplex2) {
-		TAXONOMY = "HUMAN";
+
 		minNumComponentsInComplex = minNumComponentsInComplex2;
 	}
 
 	private static String dateString;
 
 	private SeparationExperiment run(File propertiesFile, String projectName, boolean downloadFiles)
-			throws IOException, JSchException, SftpException, APIException {
-		geneMapping = UniprotGeneMapping.getInstance(new File(uniprotReleasesFolder), TAXONOMY);
+			throws IOException, JSchException, SftpException {
+		getUniprotGeneMapping();
 
 		final IP2Util ip2Util = new IP2Util(new MySftpProgressMonitor(System.out), propertiesFile, projectName);
 		if (downloadFiles) {
@@ -245,75 +315,25 @@ public class ProteinComplexAnalyzer {
 		return analyzeFractions(projectName);
 	}
 
+	public static UniprotGeneMapping getUniprotGeneMapping() {
+		if (geneMapping == null) {
+			final boolean mapToGENESYNONIM = false;
+			final boolean mapToENSEMBL = false;
+			final boolean mapToGENENAME = true;
+			geneMapping = UniprotGeneMapping.getInstance(new File(uniprotReleasesFolder), ORGANISM, mapToENSEMBL,
+					mapToGENENAME, mapToGENESYNONIM);
+		}
+		return geneMapping;
+	}
+
 	private SeparationExperiment analyzeFractions(String projectName) throws IOException {
 		final File projectFolder = getProjectFolder(projectName);
 		final File projectSummaryFile = getProjectSummaryFile(projectName);
 		if (!projectSummaryFile.exists() || projectSummaryFile.length() == 0) {
-			FileWriter fw = null;
-			try {
-				fw = new FileWriter(projectSummaryFile);
-				final File[] dtaSelectFiles = projectFolder.listFiles();
-				downloadUniprotAnnotations(dtaSelectFiles);
-				if (dtaSelectFiles != null) {
-					for (final File file : dtaSelectFiles) {
-						if (!file.isFile()) {
-							continue;
-						}
-						final String fileName = FilenameUtils.getBaseName(file.getAbsolutePath());
-						final int fractionNumber = Integer.valueOf(fileName.substring(0, fileName.indexOf("-")));
-						String fractionName = fileName.substring(fileName.indexOf("-") + 1);
-						fractionName = fractionName.substring(0, fractionName.lastIndexOf("-"));
-						fw.write(fractionNumber + "\t" + fractionName);
-						final DTASelectParser parser = new DTASelectParser(file);
-						parser.enableProteinMergingBySecondaryAccessions(getUPLR(), null);
-						parser.setOnlyReadProteins(true);
-						parser.setDecoyPattern("Reverse");
-						final Set<String> proteinAccs = parser.getProteinMap().keySet();
-						for (final String proteinACC : proteinAccs) {
-							String geneName = "";
-							final Map<String, Entry> annotatedProtein = getUPLR().getAnnotatedProtein(null, proteinACC);
-							final StringBuilder others = new StringBuilder();
-							Double mw = null;
-							if (annotatedProtein != null && annotatedProtein.containsKey(proteinACC)) {
-								final Entry entry = annotatedProtein.get(proteinACC);
-								mw = UniprotEntryUtil.getMolecularWeightInDalton(entry);
-								final List<Pair<String, String>> geneNames = UniprotEntryUtil.getGeneName(entry, false,
-										true);
-								if (!geneNames.isEmpty()) {
-									for (int i = 0; i < geneNames.size(); i++) {
-										if (i == 0) {
-											geneName = geneNames.get(i).getFirstelement();
-										} else {
-											if (!"".equals(others.toString())) {
-												others.append(" | ");
-											}
-											others.append(geneNames.get(i).getFirstelement());
-										}
-									}
-								}
-								final Set<String> ensgids = UniprotEntryUtil.getENSGIDs(entry);
-								for (final String ensgid : ensgids) {
-									if (!"".equals(others.toString())) {
-										others.append(" | ");
-									}
-									others.append(ensgid);
-								}
-							}
-							final Integer spc = parser.getProteinMap().get(proteinACC).getSpectrumCount();
-							final float nsaf = parser.getProteinMap().get(proteinACC).getNsaf();
-							fw.write("\t" + proteinACC + " | " + geneName + " | " + mw + " | " + others.toString()
-									+ " | " + spc + " | " + nsaf);
-						}
-						fw.write("\n");
-					}
-				}
-			} finally {
-				if (fw != null) {
-					fw.close();
-				}
-			}
+			writeSummaryFileNEW(projectName, projectSummaryFile, projectFolder);
+
 		}
-		final SeparationExperiment experiment = loadProjectSummaryFile(projectName, projectSummaryFile);
+		final SeparationExperiment experiment = loadProjectSummaryFileNEW(projectName, projectSummaryFile);
 		log.info(experiment.getFractions().size() + " fractions in project " + experiment.getProjectName());
 
 		// load DBs
@@ -467,6 +487,196 @@ public class ProteinComplexAnalyzer {
 		return experiment;
 	}
 
+	// private void writeSummaryFile(String projectName, File
+	// projectSummaryFile, File projectFolder) throws IOException {
+	// FileWriter fw = null;
+	// try {
+	// fw = new FileWriter(projectSummaryFile);
+	// final File[] dtaSelectFiles = projectFolder.listFiles();
+	// downloadUniprotAnnotations(dtaSelectFiles);
+	// if (dtaSelectFiles != null) {
+	//
+	// for (final File file : dtaSelectFiles) {
+	// if (!file.isFile()) {
+	// continue;
+	// }
+	// final String fileName =
+	// FilenameUtils.getBaseName(file.getAbsolutePath());
+	// final int fractionNumber = Integer.valueOf(fileName.substring(0,
+	// fileName.indexOf("-")));
+	// String fractionName = fileName.substring(fileName.indexOf("-") + 1);
+	// fractionName = fractionName.substring(0, fractionName.lastIndexOf("-"));
+	// fw.write(fractionNumber + "\t" + fractionName);
+	// final DTASelectParser parser = new DTASelectParser(file);
+	// parser.enableProteinMergingBySecondaryAccessions(getUPLR(), null);
+	// parser.setOnlyReadProteins(true);
+	// parser.setDecoyPattern("Reverse");
+	// final Set<String> proteinAccs = parser.getProteinMap().keySet();
+	// for (final String proteinACC : proteinAccs) {
+	// String geneName = "";
+	// final Map<String, Entry> annotatedProtein =
+	// getUPLR().getAnnotatedProtein(null, proteinACC);
+	// final StringBuilder others = new StringBuilder();
+	// Double mw = null;
+	// if (annotatedProtein != null && annotatedProtein.containsKey(proteinACC))
+	// {
+	// final Entry entry = annotatedProtein.get(proteinACC);
+	// mw = UniprotEntryUtil.getMolecularWeightInDalton(entry);
+	// final List<Pair<String, String>> geneNames =
+	// UniprotEntryUtil.getGeneName(entry, false,
+	// true);
+	// if (!geneNames.isEmpty()) {
+	// for (int i = 0; i < geneNames.size(); i++) {
+	// if (i == 0) {
+	// geneName = geneNames.get(i).getFirstelement();
+	// } else {
+	// if (!"".equals(others.toString())) {
+	// others.append(" | ");
+	// }
+	// others.append(geneNames.get(i).getFirstelement());
+	// }
+	// }
+	// }
+	// final Set<String> ensgids = UniprotEntryUtil.getENSGIDs(entry);
+	// for (final String ensgid : ensgids) {
+	// if (!"".equals(others.toString())) {
+	// others.append(" | ");
+	// }
+	// others.append(ensgid);
+	// }
+	// }
+	// final Integer spc =
+	// parser.getProteinMap().get(proteinACC).getSpectrumCount();
+	// final float nsaf = parser.getProteinMap().get(proteinACC).getNsaf();
+	// fw.write("\t" + proteinACC + " | " + geneName + " | " + mw + " | " +
+	// others.toString() + " | "
+	// + spc + " | " + nsaf);
+	// }
+	// fw.write("\n");
+	// }
+	// }
+	// } finally {
+	// if (fw != null) {
+	// fw.close();
+	// }
+	// }
+	// }
+
+	private void writeSummaryFileNEW(String projectName, File projectSummaryFile, File projectFolder)
+			throws IOException {
+		FileWriter fw = null;
+		try {
+			fw = new FileWriter(projectSummaryFile);
+			final File[] dtaSelectFiles = projectFolder.listFiles();
+			downloadUniprotAnnotations(dtaSelectFiles);
+			if (dtaSelectFiles != null) {
+				// first make the grouping
+				final List<ProteinGroup> groups = GroupingUtil.grouping(dtaSelectFiles, getUPLR());
+
+				for (final File file : dtaSelectFiles) {
+					if (!file.isFile()) {
+						continue;
+					}
+					final String fileName = FilenameUtils.getBaseName(file.getAbsolutePath());
+					final int fractionNumber = Integer.valueOf(fileName.substring(0, fileName.indexOf("-")));
+					String fractionName = fileName.substring(fileName.indexOf("-") + 1);
+					fractionName = fractionName.substring(0, fractionName.lastIndexOf("-"));
+					fw.write(fractionNumber + "\t" + fractionName);
+					if (fractionNumber == 37 || fractionNumber == 38) {
+						log.info("asdf");
+					}
+					for (final ProteinGroup proteinGroup : groups) {
+						final int spc = getSpecCounts(proteinGroup, fileName);
+						if (spc == 0) {
+							continue;
+						}
+						final List<String> geneNames = new ArrayList<String>();
+						final List<String> othersList = new ArrayList<String>();
+						final Map<String, Entry> annotatedProtein = getUPLR().getAnnotatedProteins(null,
+								proteinGroup.getAccessions());
+
+						final TDoubleList mw = new TDoubleArrayList();
+
+						for (final String proteinACC : proteinGroup.getAccessions()) {
+							String geneName = "";
+							final StringBuilder others = new StringBuilder();
+							if (annotatedProtein != null && annotatedProtein.containsKey(proteinACC)) {
+								final Entry entry = annotatedProtein.get(proteinACC);
+								final Double molecularWeightInDalton = UniprotEntryUtil
+										.getMolecularWeightInDalton(entry);
+								if (molecularWeightInDalton != null) {
+									mw.add(molecularWeightInDalton);
+								}
+								final List<Pair<String, String>> geneNameMap = UniprotEntryUtil.getGeneName(entry,
+										false, true);
+								if (!geneNameMap.isEmpty()) {
+									for (int i = 0; i < geneNameMap.size(); i++) {
+										if (i == 0) {
+											geneName = geneNameMap.get(i).getFirstelement();
+										} else {
+											if (!"".equals(others.toString())) {
+												others.append(AMBIGUOUS_SEPARATOR);
+											}
+											others.append(geneNameMap.get(i).getFirstelement());
+										}
+									}
+								}
+								final Set<String> ensgids = UniprotEntryUtil.getENSGIDs(entry);
+								for (final String ensgid : ensgids) {
+									if (!"".equals(others.toString())) {
+										others.append(AMBIGUOUS_SEPARATOR);
+									}
+									others.append(ensgid);
+
+								}
+							}
+							geneNames.add(geneName);
+							othersList.add(others.toString());
+						}
+						final float nsaf = Float.NaN;
+						fw.write("\t" + proteinGroup.getAccessionString(AMBIGUOUS_SEPARATOR) + " | "
+								+ getStringFromList(geneNames, AMBIGUOUS_SEPARATOR) + " | " + Maths.mean(mw) + " | "
+								+ getStringFromList(othersList, AMBIGUOUS_SEPARATOR) + " | " + spc + " | " + nsaf);
+					}
+					fw.write("\n");
+				}
+			}
+		} finally {
+			if (fw != null) {
+				fw.close();
+			}
+		}
+	}
+
+	private String getStringFromList(List<String> list, String separator) {
+		final StringBuilder sb = new StringBuilder();
+		for (final String string : list) {
+			if (!"".equals(sb.toString())) {
+				sb.append(separator);
+			}
+			sb.append(string);
+		}
+		return sb.toString();
+	}
+
+	private int getSpecCounts(ProteinGroup proteinGroup, String fileName) {
+		final Set<DTASelectPSM> ret = new THashSet<DTASelectPSM>();
+
+		final List<GroupablePeptide> psms = proteinGroup.getPSMs();
+		for (final GroupablePeptide groupablePeptide : psms) {
+			final DTASelectPSM psm = (DTASelectPSM) groupablePeptide;
+			final MSRun msRun = psm.getMSRun();
+			final String runId = msRun.getRunId();
+			if (fileName.contains(runId)) {
+				ret.add(psm);
+			} else if (fileName.contains(runId.replace("-", "_"))) {
+				ret.add(psm);
+			}
+		}
+
+		return ret.size();
+	}
+
 	private void downloadUniprotAnnotations(File[] dtaSelectFiles) throws IOException {
 		final Set<String> proteinAccs = new THashSet<String>();
 
@@ -489,14 +699,13 @@ public class ProteinComplexAnalyzer {
 
 	/**
 	 * This heatmap will have a proteinComplex in each row and the quantiattive
-	 * value for the complex in each fraction in each column. The rows are
-	 * sorted by that value
+	 * value for the complex in each fraction in each column. The rows are sorted by
+	 * that value
 	 * 
 	 * @param proteinComplexDB
 	 * @param experiment
 	 * @param quantType
-	 * @param colorScale
-	 *            from HeatChart.SCALE_LINEAR
+	 * @param colorScale       from HeatChart.SCALE_LINEAR
 	 * @throws IOException
 	 */
 	private void generateHeatMapOfAllProteinComplexes(ProteinComplexDB proteinComplexDB,
@@ -599,8 +808,8 @@ public class ProteinComplexAnalyzer {
 	}
 
 	/**
-	 * The heatmap, per protein complex, will have in each row the component of
-	 * the complex and in each column the quantitative value of the protein in a
+	 * The heatmap, per protein complex, will have in each row the component of the
+	 * complex and in each column the quantitative value of the protein in a
 	 * particular fraction
 	 * 
 	 * @param pComplex
@@ -613,16 +822,16 @@ public class ProteinComplexAnalyzer {
 			SeparationExperiment experiment, QuantType quantType) throws IOException {
 		final List<Fraction> sortedFractions = experiment.getSortedFractions();
 		final String projectName = experiment.getProjectName();
-		final List<String> components = pComplex.getComponentList();
+		final List<ProteinComponent> components = pComplex.getComponentList();
 		final double[][] dataset = new double[pComplex.getComponents().size()][sortedFractions.size()];
-		final List<String> rowList = components;
+		final List<String> rowList = components.stream().map(c -> c.getGene()).collect(Collectors.toList());
 		final List<String> columnList = new ArrayList<String>();
 		for (int numFraction2 = 0; numFraction2 < sortedFractions.size(); numFraction2++) {
 			final Fraction fraction2 = sortedFractions.get(numFraction2);
 			columnList.add(String.valueOf(numFraction2 + 1));
 			for (int numComponent = 0; numComponent < components.size(); numComponent++) {
-				final String component = components.get(numComponent);
-				final Set<Protein> proteinsInFraction = fraction2.getProteinByKey(component);
+				final ProteinComponent component = components.get(numComponent);
+				final Set<Protein> proteinsInFraction = fraction2.getProteinByComponent(component);
 				double quantValue = 0;
 				if (proteinsInFraction != null) {
 					for (final Protein protein : proteinsInFraction) {
@@ -665,13 +874,6 @@ public class ProteinComplexAnalyzer {
 			parentFolder.mkdirs();
 		}
 		return new File(pathname + File.separator + "data_for_R.tsv");
-	}
-
-	private String getNameFromProjectName(String projectName) {
-		if (namesByProjectName.containsKey(projectName)) {
-			return namesByProjectName.get(projectName);
-		}
-		return projectName;
 	}
 
 	private File getHeatMapImageFileForProteinComplex(String projectName, String experimentName, String dbName,
@@ -722,12 +924,12 @@ public class ProteinComplexAnalyzer {
 
 		final Set<String> uniprots = new THashSet<String>();
 		for (final ProteinComplex complex : proteinComplexDB.getProteinComplexes()) {
-			for (final String component : complex.getComponentList()) {
-				final String uniProtACC = FastaParser.getUniProtACC(component);
+			for (final ProteinComponent component : complex.getComponentList()) {
+				final String uniProtACC = component.getAcc();
 				if (uniProtACC != null) {
 					uniprots.add(uniProtACC);
 				} else {
-					final Set<String> mapped = geneMapping.mapGeneToUniprotACC(component);
+					final Set<String> mapped = geneMapping.mapGeneToUniprotACC(component.getGene());
 					uniprots.addAll(mapped);
 				}
 
@@ -756,18 +958,18 @@ public class ProteinComplexAnalyzer {
 
 				final String complexID = complex.getId();
 				final String complexName = complex.getName();
-				for (final String componentKey : complex.getComponentList()) {
+				for (final ProteinComponent component : complex.getComponentList()) {
 					boolean isDetectedExperimentally = false;
-					if (!fraction.getProteinByKey(componentKey).isEmpty()) {
+					if (!fraction.getProteinByComponent(component).isEmpty()) {
 						isDetectedExperimentally = true;
 					}
 					Set<String> uniprotAccs = null;
-					final String uniprotACC = FastaParser.getUniProtACC(componentKey);
+					final String uniprotACC = component.getAcc();
 					if (uniprotACC != null) {
 						uniprotAccs = new THashSet<String>();
 						uniprotAccs.add(uniprotACC);
 					} else {
-						final Set<String> mapGeneToUniprotACC = geneMapping.mapGeneToUniprotACC(componentKey);
+						final Set<String> mapGeneToUniprotACC = geneMapping.mapGeneToUniprotACC(component.getGene());
 						uniprotAccs = new THashSet<String>();
 
 						for (final String acc : mapGeneToUniprotACC) {
@@ -781,7 +983,7 @@ public class ProteinComplexAnalyzer {
 						}
 					}
 					if (uniprotAccs.isEmpty()) {
-						genesnotMapped.add(componentKey);
+						genesnotMapped.add(component.getGene());
 					}
 					final TDoubleArrayList ambiguousEntriesMWs = new TDoubleArrayList();
 					final TFloatArrayList ambiguousEntriesPIs = new TFloatArrayList();
@@ -814,7 +1016,7 @@ public class ProteinComplexAnalyzer {
 						allsubunitsPIs.add(Maths.mean(ambiguousEntriesPIs));
 					}
 				}
-				fileWriterForR.write(getNameFromProjectName(experiment.getProjectName()) + "\t");
+				fileWriterForR.write(experiment.getProjectName() + "\t");
 				fileWriterForR.write(proteinComplexDB.getName() + "\t");
 				fileWriterForR.write("COMPLEX\t");
 				fileWriterForR.write(complexID + "\t" + complexName + "\t" + "-" + "\t" + numFraction + "\t");
@@ -936,9 +1138,9 @@ public class ProteinComplexAnalyzer {
 			final TDoubleArrayList molWeights = new TDoubleArrayList();
 			for (final ProteinComplex proteinComplex : completeComplexes) {
 				final TDoubleArrayList subunitsMWs = new TDoubleArrayList();
-				for (final String componentKey : proteinComplex.getComponents()) {
+				for (final ProteinComponent component : proteinComplex.getComponentList()) {
 					final TDoubleArrayList subunitMWs = new TDoubleArrayList();
-					final Set<Protein> proteins = fraction.getProteinByKey(componentKey);
+					final Set<Protein> proteins = fraction.getProteinByComponent(component);
 
 					for (final Protein protein : proteins) {
 						if (protein.getMw() != null) {
@@ -973,14 +1175,14 @@ public class ProteinComplexAnalyzer {
 			final TDoubleArrayList molWeights = new TDoubleArrayList();
 			for (final ProteinComplex proteinComplex : completeComplexes) {
 				final TDoubleArrayList subunitMWs = new TDoubleArrayList();
-				for (final String componentKey : proteinComplex.getComponents()) {
+				for (final ProteinComponent component : proteinComplex.getComponentList()) {
 					Set<String> uniprotAccs = null;
-					final String uniprotACC = FastaParser.getUniProtACC(componentKey);
+					final String uniprotACC = component.getAcc();
 					if (uniprotACC != null) {
 						uniprotAccs = new THashSet<String>();
 						uniprotAccs.add(uniprotACC);
 					} else {
-						uniprotAccs = geneMapping.mapGeneToUniprotACC(componentKey);
+						uniprotAccs = geneMapping.mapGeneToUniprotACC(component.getGene());
 					}
 					for (final String acc : uniprotAccs) {
 						final Entry entry = getUPLR().getAnnotatedProtein(null, acc).get(acc);
@@ -1017,9 +1219,9 @@ public class ProteinComplexAnalyzer {
 			final TFloatArrayList pis = new TFloatArrayList();
 			for (final ProteinComplex proteinComplex : completeComplexes) {
 				final TFloatArrayList subunitsPIs = new TFloatArrayList();
-				for (final String componentKey : proteinComplex.getComponents()) {
+				for (final ProteinComponent component : proteinComplex.getComponentList()) {
 					final TFloatArrayList subunitPIs = new TFloatArrayList();
-					final Set<Protein> proteins = fraction.getProteinByKey(componentKey);
+					final Set<Protein> proteins = fraction.getProteinByComponent(component);
 
 					for (final Protein protein : proteins) {
 						final Entry entry = getUPLR().getAnnotatedProtein(null, protein.getAcc()).get(protein.getAcc());
@@ -1057,14 +1259,14 @@ public class ProteinComplexAnalyzer {
 			final TFloatArrayList pis = new TFloatArrayList();
 			for (final ProteinComplex proteinComplex : completeComplexes) {
 				final TFloatArrayList subunitsPIs = new TFloatArrayList();
-				for (final String componentKey : proteinComplex.getComponents()) {
+				for (final ProteinComponent component : proteinComplex.getComponentList()) {
 					Set<String> uniprotAccs = null;
-					final String uniProtACC = FastaParser.getUniProtACC(componentKey);
+					final String uniProtACC = component.getAcc();
 					if (uniProtACC != null) {
 						uniprotAccs = new THashSet<String>();
 						uniprotAccs.add(uniProtACC);
 					} else {
-						uniprotAccs = geneMapping.mapGeneToUniprotACC(componentKey);
+						uniprotAccs = geneMapping.mapGeneToUniprotACC(component.getGene());
 					}
 					for (final String acc : uniprotAccs) {
 						final Entry entry = getUPLR().getAnnotatedProtein(null, acc).get(acc);
@@ -1168,11 +1370,12 @@ public class ProteinComplexAnalyzer {
 		// transmembrane regions
 		final Set<String> totalProteinsNotCoveredInPartialComplexes = new THashSet<String>();
 		for (final ProteinComplex complex : totalPartialProteinComplexes) {
-			List<String> accs = complex.getComponentsNotInProteinsAndGenes(totalProteinKeys);
-			if (complex.isGeneNames()) {
-				accs = accs.stream().map(acc -> acc.toString() + "_" + TAXONOMY).collect(Collectors.toList());
-			}
-			totalProteinsNotCoveredInPartialComplexes.addAll(accs);
+			final List<ProteinComponent> pcs = complex.getComponentsNotInProteinsAndGenes(totalProteinKeys);
+			List<String> list = null;
+			// if (complex.isGeneNames()) {
+			list = pcs.stream().map(pc -> pc.toString() + "_" + ORGANISM).collect(Collectors.toList());
+			// }
+			totalProteinsNotCoveredInPartialComplexes.addAll(list);
 		}
 
 		getUPLR().getAnnotatedProteins(null, totalProteinsNotCoveredInPartialComplexes);
@@ -1240,16 +1443,16 @@ public class ProteinComplexAnalyzer {
 			for (final ProteinComplex complex : partialComplexes) {
 				fwFraction.write(complex.getId() + " - " + complex.getName() + "\n");
 				fwFraction.write("Present:\n");
-				final List<String> presentComponents = complex
+				final List<ProteinComponent> presentComponents = complex
 						.getComponentsInProteinsAndGenes(fraction.getProteinsAndGenes());
-				for (final String prot : presentComponents) {
+				for (final ProteinComponent prot : presentComponents) {
 					fwFraction.write(prot.toString() + "+\t");
 
 				}
 				fwFraction.write("\nNot present:\n");
-				final List<String> nonPresentComponents = complex
+				final List<ProteinComponent> nonPresentComponents = complex
 						.getComponentsNotInProteinsAndGenes(fraction.getProteinsAndGenes());
-				for (final String prot : nonPresentComponents) {
+				for (final ProteinComponent prot : nonPresentComponents) {
 					fwFraction.write(prot.toString() + "\t");
 				}
 				fwFraction.write("\n\n");
@@ -1280,8 +1483,10 @@ public class ProteinComplexAnalyzer {
 		return file;
 	}
 
-	public static ProteinComplexDB loadCoreCorumProteinComplexes() throws IOException {
-		final ProteinComplexDB proteinComplexDB = new CoreCorumDB(getCoreCorumFile(), "Human");
+	public static ProteinComplexDB loadCoreCorumProteinComplexes(boolean filterByPurificationMethod)
+			throws IOException {
+		final ProteinComplexDB proteinComplexDB = new CoreCorumDB(getCoreCorumFile(), ORGANISM, getUPLR(),
+				filterByPurificationMethod);
 		return proteinComplexDB;
 	}
 
@@ -1291,19 +1496,75 @@ public class ProteinComplexAnalyzer {
 	}
 
 	public static ProteinComplexDB loadComplexPortalProteinComplexes() throws IOException {
-		final ProteinComplexDB proteinComplexDB = new ComplexPortalDB(getComplexPortalFile());
+		final ProteinComplexDB proteinComplexDB = new ComplexPortalDB(getComplexPortalFile(), getUPLR());
+		return proteinComplexDB;
+	}
+
+	public static ProteinComplexDB loadApidProteinComplexes() throws IOException {
+		final ProteinComplexDB proteinComplexDB = new ApidDB(getApidFile(), getUPLR());
 		return proteinComplexDB;
 	}
 
 	public static ProteinComplexDB loadHUMapProteinComplexes() throws IOException {
 		final ProteinComplexDB proteinComplexDB = new ProteinComplexDB(getHUMapFile(), "Hu.MAP", getHUMapMappingFile(),
-				true);
+				true, getUPLR());
 		return proteinComplexDB;
 	}
 
-	protected static SeparationExperiment loadProjectSummaryFile(String projectName, File projectSummaryFile)
+	// public static SeparationExperiment loadProjectSummaryFile(String
+	// projectName, File projectSummaryFile)
+	// throws IOException {
+	// final SeparationExperiment ret = new SeparationExperiment(projectName);
+	// ret.setFile(projectSummaryFile);
+	// BufferedReader br = null;
+	// try {
+	// br = new BufferedReader(new FileReader(projectSummaryFile));
+	// String line = br.readLine();
+	//
+	// while (line != null) {
+	// final String[] split = line.split("\t");
+	// int fractionNumber = -1;
+	// String fractionName = null;
+	// for (int index = 0; index < split.length; index++) {
+	// final String tmp = split[index];
+	// if (index == 0) {
+	// fractionNumber = Integer.valueOf(tmp);
+	// } else if (index == 1) {
+	// fractionName = tmp;
+	//
+	// } else {
+	// final String[] split2 = tmp.split("\\|");
+	// final String proteinAcc = split2[0].trim();
+	// final String gene = split2[1].trim();
+	// Double mw = null;
+	// if (!"".equals(split2[2].trim()) && !"null".equals(split2[2].trim())) {
+	// mw = Double.valueOf(split2[2].trim());
+	// }
+	// final int spc = Integer.valueOf(split2[split2.length - 2].trim());
+	// final float nsaf = Float.valueOf(split2[split2.length - 1].trim());
+	// final Protein protein = new Protein(proteinAcc, gene, mw, spc, nsaf,
+	// fractionName);
+	// for (int i = 3; i < split2.length - 2; i++) {
+	// final String other = split2[i].trim();
+	// protein.addOther(other);
+	// }
+	// ret.addProtein(fractionName, fractionNumber, protein);
+	// }
+	// }
+	// line = br.readLine();
+	// }
+	// return ret;
+	// } finally {
+	// if (br != null) {
+	// br.close();
+	// }
+	// }
+	// }
+
+	public static SeparationExperiment loadProjectSummaryFileNEW(String projectName, File projectSummaryFile)
 			throws IOException {
 		final SeparationExperiment ret = new SeparationExperiment(projectName);
+		ret.setFile(projectSummaryFile);
 		BufferedReader br = null;
 		try {
 			br = new BufferedReader(new FileReader(projectSummaryFile));
@@ -1321,7 +1582,7 @@ public class ProteinComplexAnalyzer {
 						fractionName = tmp;
 
 					} else {
-						final String[] split2 = tmp.split("\\|");
+						final String[] split2 = tmp.split("\\s\\|\\s");
 						final String proteinAcc = split2[0].trim();
 						final String gene = split2[1].trim();
 						Double mw = null;
@@ -1348,7 +1609,7 @@ public class ProteinComplexAnalyzer {
 		}
 	}
 
-	private UniprotProteinLocalRetriever getUPLR() {
+	private static UniprotProteinLocalRetriever getUPLR() {
 		return new UniprotProteinLocalRetriever(new File(uniprotReleasesFolder), true);
 	}
 
@@ -1359,14 +1620,18 @@ public class ProteinComplexAnalyzer {
 			try {
 				final int fraction = IP2Util.getFractionNumberFromExperimentName(experimentName, experimentNamePattern);
 
-				if (fraction < 1) {
-					continue;
+				if (fraction < 0) {
+					throw new IllegalArgumentException("Fraction number is " + fraction + ". is that ok?");
 				}
 				log.info(fraction + "-\t" + experimentName);
 				final File outputFile = getexperimentalDataOutputFile(projectName, experimentName,
 						experimentNamePattern);
 				final OutputStream outputStream = new FileOutputStream(outputFile, false);
-				ip2Util.download(experimentName, dtaSelectsInProject.get(experimentName), outputStream);
+				ip2Util.download(dtaSelectsInProject.get(experimentName), outputStream);
+				if (!outputFile.exists() || outputFile.length() == 0l) {
+					throw new IllegalArgumentException(
+							"Some error happened downloading the DTASelect " + dtaSelectsInProject.get(experimentName));
+				}
 				final DTASelectParser parser = new DTASelectParser(outputFile);
 				final List<String> commandLineParameterStrings = parser.getCommandLineParameterStrings();
 				for (final String param : commandLineParameterStrings) {
@@ -1400,6 +1665,11 @@ public class ProteinComplexAnalyzer {
 
 	private static File getComplexPortalFile() {
 		final String path = basePath + File.separator + "ComplexPortal" + File.separator + "homo_sapiens.tsv";
+		return new File(path);
+	}
+
+	private static File getApidFile() {
+		final String path = basePath + File.separator + "apid" + File.separator + "9606_Q1.txt";
 		return new File(path);
 	}
 

@@ -9,6 +9,7 @@ import org.jfree.chart.plot.DatasetRenderingOrder;
 import org.jfree.chart.plot.XYPlot;
 import org.jfree.chart.renderer.xy.StandardXYItemRenderer;
 import org.jfree.chart.renderer.xy.XYBarRenderer;
+import org.jfree.chart.renderer.xy.XYLineAndShapeRenderer;
 import org.jfree.data.xy.IntervalXYDataset;
 import org.jfree.data.xy.XYDataset;
 import org.jfree.data.xy.XYSeries;
@@ -49,10 +50,10 @@ public class ModelPlot {
 	}
 
 	public JFreeChart getChart(String title, boolean showSPC, boolean showRawExperimentalData,
-			boolean showExperimentalData, boolean showFittedGaussians, boolean showTotal) {
+			boolean showExperimentalProcessedData, boolean showFittedGaussians, boolean showTotal) {
 
 		final NumberAxis numberaxis_x = new NumberAxis("Fraction");
-		String yLabel = "NSAF";
+		String yLabel = "Norm SPC";
 		if (showSPC) {
 			yLabel = "SPC";
 		}
@@ -68,7 +69,7 @@ public class ModelPlot {
 			xybarrenderer.setMargin(0.95);
 			xyplot.setRenderer(xybarrenderer);
 		} else {
-			xyplot.setRenderer(new StandardXYItemRenderer());
+			xyplot.setRenderer(new XYLineAndShapeRenderer());
 		}
 		xyplot.setDatasetRenderingOrder(DatasetRenderingOrder.FORWARD);
 
@@ -89,7 +90,7 @@ public class ModelPlot {
 			xyplot.setDataset(numDataSet++, intervalxydataset);
 		}
 
-		if (showExperimentalData) {
+		if (showExperimentalProcessedData) {
 			// experimental data
 			final IntervalXYDataset intervalxydataset = createDatasetFromProfile(profile);
 
@@ -164,7 +165,7 @@ public class ModelPlot {
 		// }
 		// // log.info(sb.toString());
 
-		final XYSeries xyseries = new XYSeries("Experimental NSAF");
+		final XYSeries xyseries = new XYSeries("Experimental data");
 		for (int i = 0; i < profile.size(); i++) {
 			final double x = profile.get(i)[0];
 			final double y = profile.get(i)[1];
@@ -213,8 +214,8 @@ public class ModelPlot {
 		this._final = _final;
 	}
 
-	public TDoubleList getProfile() {
-		return fitModel.getProfile();
+	public TDoubleList getProcessedProfile() {
+		return fitModel.getProcessedProfile();
 	}
 
 	public String getAcc() {

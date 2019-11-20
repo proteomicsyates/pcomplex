@@ -19,8 +19,17 @@ import smile.stat.distribution.Distribution;
 import smile.stat.distribution.GaussianMixture;
 import smile.validation.CrossValidation;
 
-public abstract class NaiveBayesSmile extends NaiveBayesClassification {
+public class NaiveBayesSmile extends NaiveBayesClassification {
 	private static final Logger log = Logger.getLogger(NaiveBayesSmile.class);
+	private final Map<DistanceMeasure, NLMatrix> matrixMap;
+	private final List<String> proteinList;
+
+	public NaiveBayesSmile(TrueClassifier trueClassifier, Map<DistanceMeasure, NLMatrix> matrixMap,
+			List<String> proteinList) {
+		super(trueClassifier);
+		this.matrixMap = matrixMap;
+		this.proteinList = proteinList;
+	}
 
 	public void naiveBayesTrainingOLD(Map<DistanceMeasure, NLMatrix> matrixMap, List<String> proteinList)
 			throws IOException {
@@ -37,7 +46,7 @@ public abstract class NaiveBayesSmile extends NaiveBayesClassification {
 		for (int i = 0; i < k; i++) {
 			final double[][] trainx = smile.math.Math.slice(x, cv.train[i]);
 			final int[] trainy = smile.math.Math.slice(y, cv.train[i]);
-			final int numClasses = ClassLabel.values().length;
+			final int numClasses = ClassLabel.valuesArray().length;
 			final int inputDataDimension = DistanceMeasure.values().length;
 			final NaiveBayes bayes = new NaiveBayes(NaiveBayes.Model.MULTINOMIAL, numClasses, inputDataDimension);
 
@@ -62,11 +71,11 @@ public abstract class NaiveBayesSmile extends NaiveBayesClassification {
 					if (testy[j] != label) {
 						error++;
 					}
-					final double[] posteriori = new double[ClassLabel.values().length];
+					final double[] posteriori = new double[ClassLabel.valuesArray().length];
 					bayes.predict(testx[j], posteriori);
 					int q = 0;
 					for (final double d : posteriori) {
-						System.out.println(ClassLabel.values()[q++] + ": " + d);
+						System.out.println(ClassLabel.valuesArray()[q++] + ": " + d);
 					}
 				} else {
 					// log.info("why: " + label);
@@ -87,8 +96,7 @@ public abstract class NaiveBayesSmile extends NaiveBayesClassification {
 	}
 
 	@Override
-	public ClassificationResult naiveBayesTraining(Map<DistanceMeasure, NLMatrix> matrixMap, List<String> proteinList)
-			throws IOException {
+	public MyClassifier naiveBayesTraining() throws IOException {
 		log.info("Starting Naive Bayesian approach");
 		final double[][] x = getDataSetData(matrixMap);
 		final int[] y = getDataSetClasses(proteinList);
@@ -180,6 +188,4 @@ public abstract class NaiveBayesSmile extends NaiveBayesClassification {
 		return null;
 	}
 
-	@Override
-	public abstract ClassLabel getClassLabel(String protein, String protein2) throws IOException;
 }

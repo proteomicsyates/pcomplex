@@ -12,11 +12,11 @@ import smile.netlib.NLMatrix;
 
 public abstract class NaiveBayesClassification {
 	private final static Logger log = Logger.getLogger(NaiveBayesClassification.class);
+	protected final TrueClassifier trueClassifier;
 
-	public abstract ClassificationResult naiveBayesTraining(Map<DistanceMeasure, NLMatrix> matrixMap,
-			List<String> proteinList) throws Exception;
-
-	public abstract ClassLabel getClassLabel(String protein, String protein2) throws IOException;
+	public NaiveBayesClassification(TrueClassifier trueClassifier) {
+		this.trueClassifier = trueClassifier;
+	}
 
 	/**
 	 * For each proteinPair,
@@ -34,7 +34,7 @@ public abstract class NaiveBayesClassification {
 			final String protein1 = proteinList.get(row);
 			for (int col = row + 1; col < proteinList.size(); col++) {
 				final String protein2 = proteinList.get(col);
-				final ClassLabel classLabel = getClassLabel(protein1, protein2);
+				final ClassLabel classLabel = trueClassifier.getClassLabel(protein1, protein2);
 				ret[numPair] = classLabel.getClassNumber();
 				numPair++;
 			}
@@ -77,4 +77,7 @@ public abstract class NaiveBayesClassification {
 		}
 		return ret;
 	}
+
+	public abstract MyClassifier naiveBayesTraining() throws Exception;
+
 }

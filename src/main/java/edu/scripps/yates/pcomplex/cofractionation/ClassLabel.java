@@ -7,11 +7,14 @@ package edu.scripps.yates.pcomplex.cofractionation;
  *
  */
 public enum ClassLabel {
-	INTRA_COMPLEX(0, "protein pairs that occur in the same complex"), INTER_COMPLEX(1,
-			"Proteins that are known to interact but not between them"), NOVEL_INTERACTORS(2,
-					"One or both proteins are not known to interact");
+	INTRA_COMPLEX(0, "protein pairs that occur in the same complex") //
+	, INTER_COMPLEX(1, "Proteins that are known to interact but not between them")//
+	// , NOVEL_INTERACTORS(2, "One or both proteins are not known to interact")
+	//
+	;
 	private final int classNumber;
 	private final String explanation;
+	private final static ClassLabel[] valuesArray = ClassLabel.values();
 
 	private ClassLabel(int classNumber, String explanation) {
 		this.classNumber = classNumber;
@@ -29,5 +32,9 @@ public enum ClassLabel {
 	@Override
 	public String toString() {
 		return getExplanation();
+	}
+
+	public static ClassLabel[] valuesArray() {
+		return valuesArray;
 	}
 }

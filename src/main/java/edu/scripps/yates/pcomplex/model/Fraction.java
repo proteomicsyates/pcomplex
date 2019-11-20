@@ -77,6 +77,21 @@ public class Fraction {
 		return number;
 	}
 
+	public Set<Protein> getProteinByComponent(ProteinComponent component) {
+		final Set<Protein> ret = new THashSet<Protein>();
+		if (component.getAcc() != null) {
+			if (proteinsByAcc.containsKey(component.getAcc())) {
+				ret.add(proteinsByAcc.get(component.getAcc()));
+			}
+		}
+		if (component.getGene() != null) {
+			if (proteinsByGene.containsKey(component.getGene())) {
+				ret.addAll(proteinsByGene.get(component.getGene()));
+			}
+		}
+		return ret;
+	}
+
 	public Set<Protein> getProteinByKey(String componentKey) {
 		final Set<Protein> ret = new THashSet<Protein>();
 		if (proteinsByAcc.containsKey(componentKey)) {

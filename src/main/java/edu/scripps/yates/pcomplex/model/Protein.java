@@ -1,37 +1,27 @@
 package edu.scripps.yates.pcomplex.model;
 
+import java.io.IOException;
 import java.util.Set;
-
-import org.apache.commons.lang.builder.HashCodeBuilder;
 
 import edu.scripps.yates.pcomplex.util.DataType;
 import gnu.trove.set.hash.THashSet;
 
-public class Protein {
-	private final String acc;
-	private final String gene;
+public class Protein extends ProteinComponent {
+
 	private final Set<String> others = new THashSet<String>();
 	private final Double mw;
 	private final int spc;
 	private final float nsaf;
 	private final String fractionName;
 
-	public Protein(String acc, String gene, Double mw, int spc, float nsaf, String fractionName) {
-		this.acc = acc;
-		this.gene = gene;
+	public Protein(String acc, String gene, Double mw, int spc, float nsaf, String fractionName) throws IOException {
+		super(acc, gene);
+
 		this.mw = mw;
 		this.spc = spc;
 		this.nsaf = nsaf;
 		this.fractionName = fractionName;
 
-	}
-
-	public String getAcc() {
-		return acc;
-	}
-
-	public String getGene() {
-		return gene;
 	}
 
 	public void addOther(String otherKey) {
@@ -70,11 +60,6 @@ public class Protein {
 			}
 		}
 		return super.equals(obj);
-	}
-
-	@Override
-	public int hashCode() {
-		return HashCodeBuilder.reflectionHashCode(this);
 	}
 
 	public Double getMw() {

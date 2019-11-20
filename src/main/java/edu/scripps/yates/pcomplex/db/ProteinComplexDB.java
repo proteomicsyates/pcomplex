@@ -6,31 +6,56 @@ import java.io.FileReader;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
 import org.apache.log4j.Logger;
 
+import edu.scripps.yates.annotations.uniprot.UniprotProteinLocalRetriever;
 import edu.scripps.yates.pcomplex.model.Protein;
 import edu.scripps.yates.pcomplex.model.ProteinComplex;
 import edu.scripps.yates.pcomplex.model.ProteinComplexExistenceCriteria;
+import edu.scripps.yates.pcomplex.model.ProteinComponent;
+import edu.scripps.yates.pcomplex.util.ClusterEvaluation;
 import edu.scripps.yates.pcomplex.util.PComplexUtil;
+import edu.scripps.yates.utilities.annotations.uniprot.UniprotEntryUtil;
+import edu.scripps.yates.utilities.annotations.uniprot.xml.Entry;
+import edu.scripps.yates.utilities.util.Pair;
 import gnu.trove.map.hash.THashMap;
 import gnu.trove.set.hash.THashSet;
 
 public class ProteinComplexDB {
-	protected final List<ProteinComplex> proteinComplexes = new ArrayList<ProteinComplex>();
-	private final Map<String, Set<ProteinComplex>> proteinComplexesByComponent = new THashMap<String, Set<ProteinComplex>>();
+	protected final Set<ProteinComplex> proteinComplexes = new THashSet<ProteinComplex>();
+	protected final Map<String, Set<ProteinComplex>> proteinComplexesByComponent = new THashMap<String, Set<ProteinComplex>>();
+	private final THashMap<String, ProteinComplex> proteinComplexesByID = new THashMap<String, ProteinComplex>();
+
 	private final String name;
 	private final static Logger log = Logger.getLogger(ProteinComplexDB.class);
+	private final UniprotProteinLocalRetriever uplr;
+	private boolean indexByGene;
 
-	public ProteinComplexDB(File inputFile, String name, boolean load) throws IOException {
-		this(inputFile, name, null, load);
+	public ProteinComplexDB(File inputFile, String name, boolean load, UniprotProteinLocalRetriever uplr)
+			throws IOException {
+		this(inputFile, name, null, load, uplr);
 	}
 
-	public ProteinComplexDB(File inputFile, String name, File mappingFile, boolean load) throws IOException {
+	public ProteinComplexDB(File inputFile, String name, boolean load, UniprotProteinLocalRetriever uplr,
+			boolean indexByGene) throws IOException {
+		this(inputFile, name, null, load, uplr, indexByGene);
+	}
+
+	public ProteinComplexDB(File inputFile, String name, File mappingFile, boolean load,
+			UniprotProteinLocalRetriever uplr) throws IOException {
+		this(inputFile, name, mappingFile, load, uplr, true);
+	}
+
+	public ProteinComplexDB(File inputFile, String name, File mappingFile, boolean load,
+			UniprotProteinLocalRetriever uplr, boolean indexByGene) throws IOException {
+		this.uplr = uplr;
 		this.name = name;
+		this.indexByGene = indexByGene;
 		if (load) {
 			Map<String, String> geneToUniprotMap = null;
 			if (mappingFile != null) {
@@ -65,21 +90,26 @@ public class ProteinComplexDB {
 				String line = null;
 				int numLine = 1;
 				while ((line = br.readLine()) != null) {
-					final ProteinComplex proteinComplex = new ProteinComplex(String.valueOf(numLine++), true);
-					proteinComplexes.add(proteinComplex);
+					final ProteinComplex proteinComplex = new ProteinComplex(String.valueOf(numLine++));
+
 					final String[] split = line.split("\t");
 					for (final String geneName : split) {
 						if (geneToUniprotMap != null && !geneToUniprotMap.containsKey(geneName)) {
 							log.warn("Mapping for gene name: " + geneName + " is not found");
-							addComponentToProteinComplex(proteinComplex, geneName);
+							final ProteinComponent pc = new ProteinComponent(null, geneName);
+							proteinComplex.addComponent(pc);
 							continue;
 						}
 						if (geneToUniprotMap != null) {
-							addComponentToProteinComplex(proteinComplex, geneToUniprotMap.get(geneName));
+							final String acc = geneToUniprotMap.get(geneName);
+							final ProteinComponent pc = new ProteinComponent(acc, geneName);
+							proteinComplex.addComponent(pc);
 						} else {
-							addComponentToProteinComplex(proteinComplex, geneName);
+							final ProteinComponent pc = new ProteinComponent(null, geneName);
+							proteinComplex.addComponent(pc);
 						}
 					}
+					proteinComplexes.add(proteinComplex);
 				}
 				setReady();
 			} finally {
@@ -89,28 +119,60 @@ public class ProteinComplexDB {
 		}
 	}
 
-	protected void addComponentToProteinComplex(ProteinComplex proteinComplex, String uniprotACC) {
-		proteinComplex.addComponent(uniprotACC);
-
-	}
-
 	protected void setReady() {
-
+		proteinComplexesByID.clear();
+		proteinComplexesByComponent.clear();
+		// get all annotations and set protein names
+		final Set<String> accs = new THashSet<String>();
 		for (final ProteinComplex proteinComplex : proteinComplexes) {
-			for (final String prot : proteinComplex.getComponents()) {
-				if (proteinComplexesByComponent.containsKey(prot)) {
-					proteinComplexesByComponent.get(prot).add(proteinComplex);
-				} else {
-					final Set<ProteinComplex> set = new THashSet<ProteinComplex>();
-					set.add(proteinComplex);
-					proteinComplexesByComponent.put(prot, set);
+			proteinComplexesByID.put(proteinComplex.getId(), proteinComplex);
+			for (final ProteinComponent prot : proteinComplex.getComponentList()) {
+				if (prot.getAcc() != null) {
+					accs.add(prot.getAcc());
+					if (proteinComplexesByComponent.containsKey(prot.getAcc())) {
+						proteinComplexesByComponent.get(prot.getAcc()).add(proteinComplex);
+					} else {
+						final Set<ProteinComplex> set = new THashSet<ProteinComplex>();
+						set.add(proteinComplex);
+						proteinComplexesByComponent.put(prot.getAcc(), set);
+					}
+				}
+				if (indexByGene && prot.getGene() != null) {
+					if (proteinComplexesByComponent.containsKey(prot.getGene())) {
+						proteinComplexesByComponent.get(prot.getGene()).add(proteinComplex);
+					} else {
+						final Set<ProteinComplex> set = new THashSet<ProteinComplex>();
+						set.add(proteinComplex);
+						proteinComplexesByComponent.put(prot.getGene(), set);
+					}
 				}
 			}
 		}
-
+		if (!accs.isEmpty()) {
+			final Map<String, Entry> annotatedProteins = uplr.getAnnotatedProteins(null, accs);
+			for (final ProteinComplex proteinComplex : proteinComplexes) {
+				for (final ProteinComponent prot : proteinComplex.getComponentList()) {
+					if (prot.getAcc() != null && prot.getProteinName() == null) {
+						if (annotatedProteins.containsKey(prot.getAcc())) {
+							final Entry entry = annotatedProteins.get(prot.getAcc());
+							final String proteinDescription = UniprotEntryUtil.getProteinDescription(entry);
+							prot.setProteinName(proteinDescription);
+						}
+					}
+				}
+			}
+		}
 	}
 
-	public List<ProteinComplex> getProteinComplexes() {
+	public boolean isIndexByGene() {
+		return indexByGene;
+	}
+
+	public void setIndexByGene(boolean indexByGene) {
+		this.indexByGene = indexByGene;
+	}
+
+	public Set<ProteinComplex> getProteinComplexes() {
 		return proteinComplexes;
 	}
 
@@ -129,6 +191,18 @@ public class ProteinComplexDB {
 		final Set<ProteinComplex> ret = new THashSet<ProteinComplex>();
 		if (proteinComplexesByComponent.containsKey(proteinKey)) {
 			ret.addAll(proteinComplexesByComponent.get(proteinKey));
+		}
+
+		return ret;
+	}
+
+	public Set<ProteinComplex> getProteinComplexesByProteins(Collection<String> proteinKeys) {
+		final Set<ProteinComplex> ret = new THashSet<ProteinComplex>();
+		for (final String proteinKey : proteinKeys) {
+
+			if (proteinComplexesByComponent.containsKey(proteinKey)) {
+				ret.addAll(proteinComplexesByComponent.get(proteinKey));
+			}
 		}
 
 		return ret;
@@ -158,7 +232,7 @@ public class ProteinComplexDB {
 		final Set<ProteinComplex> ret = new THashSet<ProteinComplex>();
 
 		for (final ProteinComplex proteinComplex : proteinComplexes) {
-			if (proteinComplex.getComponents().size() >= minNumComponents) {
+			if (proteinComplex.getComponentSet().size() >= minNumComponents) {
 				if (proteinComplex.isFullyRepresented(proteinsAndGenes)) {
 					ret.add(proteinComplex);
 				}
@@ -181,9 +255,8 @@ public class ProteinComplexDB {
 		final Set<ProteinComplex> ret = new THashSet<ProteinComplex>();
 
 		for (final ProteinComplex proteinComplex : proteinComplexes) {
-			if (proteinComplex.getComponents().size() >= minNumComponents) {
+			if (proteinComplex.getComponentSet().size() >= minNumComponents) {
 				if (existenceCriteria.considersExisting(proteinComplex, proteinsAndGenes)) {
-
 					ret.add(proteinComplex);
 
 				}
@@ -305,5 +378,113 @@ public class ProteinComplexDB {
 			}
 		}
 		return ret;
+	}
+
+	/**
+	 * Merge complexes that have an overlapping score greater than the provided in
+	 * the parameter
+	 * 
+	 * @param maxOverlapScore
+	 */
+	public void mergeComplexes(double maxOverlapScore) {
+		log.info("Merging complexes from REFERENCE set '" + getName() + "' that overlap with overlap score > "
+				+ maxOverlapScore);
+		final int initialSize = proteinComplexes.size();
+		int round = 1;
+		while (true) {
+			final List<Pair<ProteinComplex, ProteinComplex>> toMerge = new ArrayList<Pair<ProteinComplex, ProteinComplex>>();
+			final List<ProteinComplex> proteinComplexList = new ArrayList<ProteinComplex>();
+			proteinComplexList.addAll(proteinComplexes);
+
+			for (int i = 0; i < proteinComplexList.size(); i++) {
+				final ProteinComplex complex1 = proteinComplexList.get(i);
+				for (int j = i + 1; j < proteinComplexList.size(); j++) {
+					final ProteinComplex complex2 = proteinComplexList.get(j);
+					final double overlap = ClusterEvaluation.getOverlap(complex1, complex2);
+					if (overlap > maxOverlapScore) {
+						final Pair<ProteinComplex, ProteinComplex> pair = new Pair<ProteinComplex, ProteinComplex>(
+								complex1, complex2);
+						toMerge.add(pair);
+						if (!proteinComplexes.contains(complex1)) {
+							System.out.println("WHAT");
+						}
+						if (!proteinComplexes.contains(complex2)) {
+							System.out.println("WHAT");
+						}
+					}
+				}
+			}
+			log.info(toMerge.size() + " to merge in round " + round);
+			// delete te ones in toMerge
+			for (final Pair<ProteinComplex, ProteinComplex> pair : toMerge) {
+				log.info("Merging:\n" + pair.getFirstelement() + "\n" + pair.getSecondElement());
+				boolean removed = proteinComplexes.remove(pair.getFirstelement());
+				if (!removed) {
+					System.out.println(proteinComplexes.contains(pair.getFirstelement()));
+				}
+				removed = proteinComplexes.remove(pair.getSecondElement());
+				if (!removed) {
+					System.out.println(proteinComplexes.contains(pair.getSecondElement()));
+				}
+			}
+			// merge the ones in toMerge
+			for (final Pair<ProteinComplex, ProteinComplex> pair : toMerge) {
+				final ProteinComplex mergedComplex = new ProteinComplex(pair.getFirstelement().getId());
+				mergedComplex.setName(
+						"Merged from: " + pair.getFirstelement().getId() + " " + pair.getFirstelement().getName()
+								+ " and " + pair.getSecondElement().getId() + " " + pair.getSecondElement().getName());
+				for (final ProteinComponent pc : pair.getFirstelement().getComponentList()) {
+					mergedComplex.addComponent(pc);
+				}
+				for (final ProteinComponent pc : pair.getSecondElement().getComponentList()) {
+					mergedComplex.addComponent(pc);
+				}
+				// log.info("\nMerged from:\n" + pair.getFirstelement() + "\n" +
+				// pair.getSecondElement() + "\nResult: \t"
+				// + mergedComplex);
+				proteinComplexes.add(mergedComplex);
+			}
+			log.info(proteinComplexes.size() + " complexes after round " + round);
+			if (toMerge.isEmpty()) {
+				break;
+			}
+			round++;
+		}
+		proteinComplexesByComponent.clear();
+		setReady();
+		log.info((initialSize - proteinComplexes.size()) + " complexes merged. Now we have " + proteinComplexes.size()
+				+ " complexes (before " + initialSize + ")");
+	}
+
+	public void filterByComplexSize(int minComplexSizeInReferenceSetForLearning,
+			int maxComplexSizeInReferenceSetForLearning) {
+		log.info("Deleting complexes from REFERENCE set '" + getName() + "' with more than "
+				+ maxComplexSizeInReferenceSetForLearning + " components and less than "
+				+ minComplexSizeInReferenceSetForLearning + " components");
+		final int initialSize = proteinComplexes.size();
+		int big = 0;
+		int small = 0;
+		final Iterator<ProteinComplex> iterator = proteinComplexes.iterator();
+		while (iterator.hasNext()) {
+			final ProteinComplex complex = iterator.next();
+			if (complex.size() > maxComplexSizeInReferenceSetForLearning) {
+				iterator.remove();
+				big++;
+			} else if (complex.size() < minComplexSizeInReferenceSetForLearning) {
+				iterator.remove();
+				small++;
+			}
+		}
+		proteinComplexesByComponent.clear();
+		setReady();
+		log.info((initialSize - proteinComplexes.size()) + " complexes deleted. Now we have " + proteinComplexes.size()
+				+ " complexes (before " + initialSize + ")");
+		log.info("From the " + (initialSize - proteinComplexes.size()) + " discarded, " + big + " were too big (>"
+				+ maxComplexSizeInReferenceSetForLearning + ") and " + small + " were too small (<"
+				+ minComplexSizeInReferenceSetForLearning + ")");
+	}
+
+	public ProteinComplex getProteinComplexesByID(String complexID) {
+		return proteinComplexesByID.get(complexID);
 	}
 }
