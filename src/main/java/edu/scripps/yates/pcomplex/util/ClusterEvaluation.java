@@ -32,8 +32,21 @@ public class ClusterEvaluation {
 	public static Set<ProteinComponent> getIntersection(List<ProteinComponent> componentList1,
 			List<ProteinComponent> componentList2) {
 		final Set<ProteinComponent> intersection = new THashSet<ProteinComponent>();
-		intersection.addAll(componentList1);
-		intersection.retainAll(componentList2);
+
+		List<ProteinComponent> smallComplex = componentList1;
+		List<ProteinComponent> bigComplex = componentList2;
+		if (smallComplex.size() > bigComplex.size()) {
+			smallComplex = componentList2;
+			bigComplex = componentList1;
+		}
+		final Set<ProteinComponent> smallSet = new THashSet<ProteinComponent>();
+		smallSet.addAll(smallComplex);
+		for (final ProteinComponent c1 : bigComplex) {
+			if (smallSet.contains(c1)) {
+				intersection.add(c1);
+			}
+		}
+
 		return intersection;
 	}
 
@@ -64,8 +77,17 @@ public class ClusterEvaluation {
 			ProteinComplex complex2) {
 
 		final Set<ProteinComponent> intersection = new THashSet<ProteinComponent>();
-		intersection.addAll(complex1.getComponentList());
-		intersection.retainAll(complex2.getComponentList());
+		ProteinComplex smallComplex = complex1;
+		ProteinComplex bigComplex = complex2;
+		if (smallComplex.getComponentList().size() > bigComplex.getComponentList().size()) {
+			smallComplex = complex2;
+			bigComplex = complex1;
+		}
+		for (final ProteinComponent c1 : bigComplex.getComponentList()) {
+			if (smallComplex.getComponentSet().contains(c1)) {
+				intersection.add(c1);
+			}
+		}
 		return intersection;
 	}
 
@@ -188,8 +210,8 @@ public class ClusterEvaluation {
 	}
 
 	/**
-	 * Discard edges when the complexes connected contain other edges with
-	 * higher weights
+	 * Discard edges when the complexes connected contain other edges with higher
+	 * weights
 	 * 
 	 * @param edges
 	 * @param edgesByPredicted

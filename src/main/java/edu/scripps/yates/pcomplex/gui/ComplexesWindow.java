@@ -64,10 +64,14 @@ import edu.scripps.yates.pcomplex.model.ProteinComponent;
 import edu.scripps.yates.pcomplex.model.SeparationExperiment;
 import edu.scripps.yates.pcomplex.util.DataType;
 import edu.scripps.yates.pcomplex.util.PComplexUtil;
+import edu.scripps.yates.utilities.annotations.uniprot.UniprotEntryUtil;
 import edu.scripps.yates.utilities.annotations.uniprot.UniprotGeneMapping;
+import edu.scripps.yates.utilities.annotations.uniprot.xml.Entry;
 import edu.scripps.yates.utilities.fasta.FastaParser;
 import edu.scripps.yates.utilities.maths.Maths;
 import gnu.trove.list.array.TDoubleArrayList;
+import gnu.trove.map.hash.TObjectIntHashMap;
+import gnu.trove.set.hash.THashSet;
 
 public class ComplexesWindow extends JFrame {
 
@@ -584,17 +588,36 @@ public class ComplexesWindow extends JFrame {
 	private List<ProteinComplex> loadProteinComplexes(File selectedFile) throws IOException {
 		final List<String> readAllLines = Files.readAllLines(selectedFile.toPath());
 		final List<ProteinComplex> ret = new ArrayList<ProteinComplex>();
+		final TObjectIntHashMap<String> indexByHeader = new TObjectIntHashMap<String>();
 		for (final String line : readAllLines) {
+			if (line.startsWith("Type")) {
+				int index = 0;
+				final String[] split = line.split("\t");
+				for (final String header : split) {
+					indexByHeader.put(header, index);
+					index++;
+				}
+				continue;
+			}
 			final ProteinComplex complex = new ProteinComplex(null);
 			ret.add(complex);
 			final List<String> components = new ArrayList<String>();
-			if (line.contains("\t")) {
-				final String[] split = line.split("\t");
-				for (final String acc : split) {
-					components.add(acc);
+			if (!indexByHeader.isEmpty() && indexByHeader.containsKey("Components")) {
+				if (line.contains("\t")) {
+					final String[] split2 = line.split("\t");
+					for (int i = indexByHeader.get("Components"); i < split2.length; i++) {
+						components.add(split2[i]);
+					}
 				}
 			} else {
-				components.add(line);
+				if (line.contains("\t")) {
+					final String[] split = line.split("\t");
+					for (final String acc : split) {
+						components.add(acc);
+					}
+				} else {
+					components.add(line);
+				}
 			}
 			final String uniProtACC = FastaParser.getUniProtACC(components.get(0));
 			if (uniProtACC != null) {
@@ -627,7 +650,6 @@ public class ComplexesWindow extends JFrame {
 				for (final String gene : components) {
 					String acc = null;
 					final Set<String> accs = ProteinComplexAnalyzer.getUniprotGeneMapping().mapGeneToUniprotACC(gene);
-
 					if (!accs.isEmpty()) {
 						final StringBuilder sb = new StringBuilder();
 						for (final String acc2 : accs) {
@@ -643,7 +665,64 @@ public class ComplexesWindow extends JFrame {
 				}
 			}
 		}
+		// iterate over the complexes and reduce the accession to the Swissprot one if
+		// possible
+		final Set<String> toQuery = new THashSet<String>();
+		for (final ProteinComplex proteinComplex : ret) {
+			for (final ProteinComponent component : proteinComplex.getComponentList()) {
+				if (component.getAcc().contains(ProteinComplexAnalyzer.AMBIGUOUS_SEPARATOR)) {
+					final String[] split = component.getAcc().split(ProteinComplexAnalyzer.AMBIGUOUS_SEPARATOR);
+					for (final String acc : split) {
+						toQuery.add(acc);
+					}
+				}
+			}
+		}
+		int numProteinsSimplified = 0;
+		final Map<String, Entry> annotatedProteins = ProteinComplexAnalyzer.getUPLR().getAnnotatedProteins(null,
+				toQuery);
+		for (final ProteinComplex proteinComplex : ret) {
+			for (final ProteinComponent component : proteinComplex.getComponentList()) {
+				if (component.getAcc().contains(ProteinComplexAnalyzer.AMBIGUOUS_SEPARATOR)) {
+					final String[] split = component.getAcc().split(ProteinComplexAnalyzer.AMBIGUOUS_SEPARATOR);
+					final Set<String> accs = new THashSet<String>();
+					for (final String acc : split) {
+						accs.add(acc);
+					}
+					final Set<String> accsSimplified = getReviewed(accs, annotatedProteins);
+					final StringBuilder accStringBuilder = new StringBuilder();
+					for (final String acc : accsSimplified) {
+						if (!"".equals(accStringBuilder.toString())) {
+							accStringBuilder.append(ProteinComplexAnalyzer.AMBIGUOUS_SEPARATOR);
+						}
+						accStringBuilder.append(acc);
+					}
+					if (accsSimplified.size() < accs.size()) {
+						numProteinsSimplified++;
+					}
+					component.setAcc(accStringBuilder.toString());
+				}
+			}
+		}
+		log.info(numProteinsSimplified
+				+ " proteins in which we selected Swissprot ACC among all mapped ones from their gene name");
+
 		showError(ret.size() + " protein complexes loaded", "Protein complexes loaded");
+		return ret;
+	}
+
+	private Set<String> getReviewed(Set<String> accs2, Map<String, Entry> annotatedProteins) {
+		final Set<String> ret = new THashSet<String>();
+		for (final String acc : accs2) {
+			if (annotatedProteins.containsKey(acc)) {
+				if (UniprotEntryUtil.isSwissProt(annotatedProteins.get(acc))) {
+					ret.add(acc);
+				}
+			}
+		}
+		if (ret.isEmpty()) {
+			return accs2;
+		}
 		return ret;
 	}
 
@@ -687,8 +766,8 @@ public class ComplexesWindow extends JFrame {
 		int numRow = 0;
 		if (!separated) {
 			// spc
-			final JFreeChart chart = getChart(selectedComplex.getComponentListName(false), title.toString(), dataType,
-					smoothWindow);
+			final JFreeChart chart = getChart(selectedComplex.getComponentListName(ProteinComplex.useGeneToPrint),
+					title.toString(), dataType, smoothWindow);
 			final ChartPanel graphPanel = new ChartPanel(chart);
 			graphPanel.setFillZoomRectangle(false);
 			graphPanel.setBorder(new TitledBorder(null, "Chart", TitledBorder.LEADING, TitledBorder.TOP, null, null));
@@ -702,7 +781,11 @@ public class ComplexesWindow extends JFrame {
 		} else {
 			for (final ProteinComponent component : selectedComplex.getComponentList()) {
 				final List<String> accList = new ArrayList<String>();
-				accList.add(component.getAcc());
+				if (ProteinComplex.useGeneToPrint) {
+					accList.add(component.getGene());
+				} else {
+					accList.add(component.getAcc());
+				}
 				final JFreeChart chart = getChart(accList, accList.get(0), dataType, smoothWindow);
 				// only show title if the chart is just one
 				chart.getTitle().setVisible(selectedComplex.getComponents().size() == 1);
@@ -731,8 +814,7 @@ public class ComplexesWindow extends JFrame {
 	 * @param selectedComplex
 	 * @param title
 	 * @param smoothWindow
-	 * @param showSPC
-	 *            if true is SPC if false is NSAF
+	 * @param showSPC         if true is SPC if false is NSAF
 	 * @return
 	 */
 	public JFreeChart getChart(List<String> accs, String title, DataType dataType, Integer smoothWindow) {
@@ -795,9 +877,9 @@ public class ComplexesWindow extends JFrame {
 	private List<double[]> getSpcProfile(String acc, Integer smoothWindow) {
 		TDoubleArrayList spcs = new TDoubleArrayList();
 		for (final Fraction fraction : experiment.getSortedFractions()) {
-			final Protein protein = fraction.getProteinByAcc(acc);
-			if (protein != null) {
-				spcs.add(protein.getSpc());
+			final Set<Protein> protein = fraction.getProteinByKey(acc);
+			if (protein != null && protein.size() == 1) {
+				spcs.add(protein.iterator().next().getSpc());
 			} else {
 				spcs.add(0);
 			}

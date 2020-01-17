@@ -38,7 +38,7 @@ public class NaiveBayesWeka extends NaiveBayesClassification {
 
 			System.out.println("** Naive Bayes Evaluation with Datasets **");
 			System.out.println(eval.toSummaryString());
-			System.out.print(" the expression for the input data as per alogorithm is ");
+			System.out.print(" the expression for the input data as per algorithm is ");
 			System.out.println(classifier);
 
 		}

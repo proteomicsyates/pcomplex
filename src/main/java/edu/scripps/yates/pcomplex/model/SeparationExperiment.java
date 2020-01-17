@@ -35,6 +35,7 @@ public class SeparationExperiment {
 	private NLMatrix normalizedProfiles;
 	private final Map<String, Set<String>> fractionNamesPerProteinAcc = new THashMap<String, Set<String>>();
 	private File experimentFile;
+	private Map<String, List<Protein>> totalProteinsByAcc;
 
 	public SeparationExperiment(String projectName) {
 		this.projectName = projectName;
@@ -96,8 +97,8 @@ public class SeparationExperiment {
 
 	/**
 	 * Returns the total proteins detected in all fractions. Note that multiple
-	 * objects referring to the same protein can be found, since a
-	 * {@link Protein} object is a protein in a certain {@link Fraction}
+	 * objects referring to the same protein can be found, since a {@link Protein}
+	 * object is a protein in a certain {@link Fraction}
 	 * 
 	 * @return
 	 */
@@ -109,12 +110,10 @@ public class SeparationExperiment {
 	 * Map with key as ACC and value as the list of proteins in each fraction in
 	 * order
 	 * 
-	 * @param minFractions
-	 *            minimum number of fractions in which a protein should be
-	 *            detected
-	 * @param minSPCInOneFraction
-	 *            minimum number of SPCs to consider that a protein is present
-	 *            in a fraction
+	 * @param minFractions        minimum number of fractions in which a protein
+	 *                            should be detected
+	 * @param minSPCInOneFraction minimum number of SPCs to consider that a protein
+	 *                            is present in a fraction
 	 * @return
 	 */
 	public Map<String, List<Protein>> getTotalProteinsByAcc(int minFractions, int minSPCInOneFraction) {
@@ -171,8 +170,11 @@ public class SeparationExperiment {
 	 * @return
 	 */
 	public Map<String, List<Protein>> getTotalProteinsByAcc() {
-
-		return getTotalProteinsByAcc(0, 0);
+		if (totalProteinsByAcc == null) {
+			totalProteinsByAcc = new THashMap<String, List<Protein>>();
+			totalProteinsByAcc.putAll(getTotalProteinsByAcc(0, 0));
+		}
+		return totalProteinsByAcc;
 	}
 
 	public Set<ProteinComplex> getCompleteComplexes(ProteinComplexDB proteinComplexDB, int minNumComponentsInComplex) {
@@ -193,8 +195,8 @@ public class SeparationExperiment {
 	}
 
 	/**
-	 * Exports a text table separated by tabs in a file located in the same
-	 * folder as the properties file and with the name of the project.
+	 * Exports a text table separated by tabs in a file located in the same folder
+	 * as the properties file and with the name of the project.
 	 * 
 	 * @param b
 	 * 
@@ -334,8 +336,7 @@ public class SeparationExperiment {
 	 * {@link SeparationExperiment} exp.<br>
 	 * If the experiment has not been normalized yet, it will be normalized in 2
 	 * steps:<br>
-	 * First, by normalizing each protein across all fractions
-	 * (horizontally),<br>
+	 * First, by normalizing each protein across all fractions (horizontally),<br>
 	 * Second, by normalizing each fraction across all proteins (vertically).
 	 * 
 	 * @param exp

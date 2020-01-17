@@ -2,10 +2,13 @@ package edu.scripps.yates.pcomplex;
 
 import static org.junit.Assert.assertEquals;
 
+import java.io.IOException;
+
 import org.junit.Test;
 import org.springframework.core.io.ClassPathResource;
 
 import edu.scripps.yates.pcomplex.model.ProteinComplex;
+import edu.scripps.yates.pcomplex.model.ProteinComponent;
 import junit.framework.Assert;
 import smile.classification.FLD;
 import smile.data.AttributeDataset;
@@ -14,19 +17,19 @@ import smile.validation.LOOCV;
 
 public class tests {
 	@Test
-	public void test1() {
-		final ProteinComplex complex1 = new ProteinComplex("ASDF", true);
-		complex1.addComponent("COMP1");
-		complex1.addComponent("COMP2");
+	public void test1() throws IOException {
+		final ProteinComplex complex1 = new ProteinComplex("ASDF");
+		complex1.addComponent(new ProteinComponent("COMP1", ""));
+		complex1.addComponent(new ProteinComponent("COMP2", ""));
 		System.out.println(complex1.hashCode());
 
-		final ProteinComplex complex2 = new ProteinComplex("ASDF12", true);
-		complex2.addComponent("COMP2");
-		complex2.addComponent("COMP1");
+		final ProteinComplex complex2 = new ProteinComplex("ASDF12");
+		complex2.addComponent(new ProteinComponent("COMP2", ""));
+		complex2.addComponent(new ProteinComponent("COMP1", ""));
 		System.out.println(complex2.hashCode());
 
 		Assert.assertEquals(complex1.hashCode(), complex2.hashCode());
-		complex2.addComponent("COMP3");
+		complex2.addComponent(new ProteinComponent("COMP3", ""));
 		System.out.println(complex2.hashCode());
 		Assert.assertNotSame(complex1.hashCode(), complex2.hashCode());
 

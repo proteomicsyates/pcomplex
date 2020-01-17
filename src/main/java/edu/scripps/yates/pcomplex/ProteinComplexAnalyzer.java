@@ -33,6 +33,7 @@ import edu.scripps.yates.annotations.uniprot.UniprotProteinLocalRetriever;
 import edu.scripps.yates.dtaselectparser.DTASelectParser;
 import edu.scripps.yates.dtaselectparser.util.DTASelectPSM;
 import edu.scripps.yates.pcomplex.db.ApidDB;
+import edu.scripps.yates.pcomplex.db.BioPlexDB;
 import edu.scripps.yates.pcomplex.db.ComplexPortalDB;
 import edu.scripps.yates.pcomplex.db.CoreCorumDB;
 import edu.scripps.yates.pcomplex.db.ProteinComplexDB;
@@ -86,7 +87,9 @@ public class ProteinComplexAnalyzer {
 			// "2019_10_14_Mixed_bed_SEC"
 //			"Kirkwood_et_al_Rep1",//
 //			"Kirkwood_et_al_Rep2",//
-			"Kirkwood_et_al_Rep3"//
+//			"Kirkwood_et_al_Rep3",//
+			"Kirkwood_et_al_Rep123" //
+//			"2019_11_19_Mixed_bed_SEC"//
 	};
 
 	// public static final String[] projectsNames = { //
@@ -109,7 +112,7 @@ public class ProteinComplexAnalyzer {
 	/*****************************/
 	/** DOWNLOAD FILES **/
 	/*****************************/
-	private static final boolean downloadFiles = true;
+	private static final boolean downloadFiles = false;
 
 	/**
 	 * REFERENCE DATABASES
@@ -118,13 +121,14 @@ public class ProteinComplexAnalyzer {
 	public static boolean useComplexPortalDB = true;
 	public static boolean useCoreCorumDB = true;
 	public static boolean useAPID = false;
+	public static boolean useBioPlex = true;
 	/********************/
 
 	private final boolean getUniqueProteinsPerFraction = true;
 
 	//
 	private final boolean generateHeatMapsForAllComplexes = false;
-	private final boolean compareWithProteinComplexDBs = false;
+	private final boolean compareWithProteinComplexDBs = true;
 	private final boolean generateHeatMapsForIndividualProteinComplexes = false;
 
 	private static UniprotGeneMapping geneMapping;
@@ -256,6 +260,19 @@ public class ProteinComplexAnalyzer {
 				e.printStackTrace();
 			}
 		}
+		if (useBioPlex) {
+			try {
+				// this database is very curated but it is binary, so the
+				// complexes will be interactions between 2 proteins, therefore
+				// the simplification doesn't apply here.
+				final ProteinComplexDB bioplex = loadBioPlex();
+				log.info(bioplex.getProteinComplexes().size() + " protein complexes in " + bioplex.getName());
+				dbs.add(bioplex);
+				ProteinComponent.dbs.add(bioplex);
+			} catch (final IOException e) {
+				e.printStackTrace();
+			}
+		}
 		return dbs;
 	}
 
@@ -335,7 +352,11 @@ public class ProteinComplexAnalyzer {
 		}
 		final SeparationExperiment experiment = loadProjectSummaryFileNEW(projectName, projectSummaryFile);
 		log.info(experiment.getFractions().size() + " fractions in project " + experiment.getProjectName());
+		final File[] dtaSelectFiles = projectFolder.listFiles();
+		downloadUniprotAnnotations(dtaSelectFiles);
 
+		// first make the grouping
+		final List<ProteinGroup> groups = GroupingUtil.grouping(dtaSelectFiles, getUPLR());
 		// load DBs
 		// add to list of DBs
 		final List<ProteinComplexDB> dbs = getDBs();
@@ -365,6 +386,7 @@ public class ProteinComplexAnalyzer {
 			fw.write("Num proteins in fraction\t");
 			final Set<Protein> totalProteins = new THashSet<Protein>();
 			for (final Fraction fraction : sortedFractions) {
+
 				fw.write(fraction.getProteins().size() + "\t");
 				totalProteins.addAll(fraction.getProteins());
 				//
@@ -399,7 +421,7 @@ public class ProteinComplexAnalyzer {
 					fw.write(proteins.size() + "\t");
 				}
 			}
-			fw.write("\nNumber of total proteins in all fractions:\t" + totalProteins.size() + "\n");
+			fw.write("\nNumber of total proteins in all fractions:\t" + groups.size() + "\n");
 			// annotate all
 			log.info("Getting annotations of experimental proteins from UniprotKB");
 			getUPLR().getAnnotatedProteins(null,
@@ -1500,6 +1522,11 @@ public class ProteinComplexAnalyzer {
 		return proteinComplexDB;
 	}
 
+	public static BioPlexDB loadBioPlex() throws IOException {
+		final BioPlexDB db = new BioPlexDB(getBioPlexFiles(), getUPLR());
+		return db;
+	}
+
 	public static ProteinComplexDB loadApidProteinComplexes() throws IOException {
 		final ProteinComplexDB proteinComplexDB = new ApidDB(getApidFile(), getUPLR());
 		return proteinComplexDB;
@@ -1609,7 +1636,7 @@ public class ProteinComplexAnalyzer {
 		}
 	}
 
-	private static UniprotProteinLocalRetriever getUPLR() {
+	public static UniprotProteinLocalRetriever getUPLR() {
 		return new UniprotProteinLocalRetriever(new File(uniprotReleasesFolder), true);
 	}
 
@@ -1666,6 +1693,16 @@ public class ProteinComplexAnalyzer {
 	private static File getComplexPortalFile() {
 		final String path = basePath + File.separator + "ComplexPortal" + File.separator + "homo_sapiens.tsv";
 		return new File(path);
+	}
+
+	private static List<File> getBioPlexFiles() {
+		final File parentFolder = new File(basePath + File.separator + "BioPlex");
+		final File[] files = parentFolder.listFiles();
+		final List<File> ret = new ArrayList<File>();
+		for (final File file : files) {
+			ret.add(file);
+		}
+		return ret;
 	}
 
 	private static File getApidFile() {

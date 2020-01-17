@@ -66,6 +66,8 @@ public class Dataset {
 		proteinPairKeysList = new ArrayList<String>();
 		for (int index = 0; index < proteinKeys.size(); index++) {
 			final String protein1 = proteinKeys.get(index);
+			// if a referenceDB is present (not null), taking only the proteins that are in
+			// there
 			if (referenceDB != null && referenceDB
 					.getProteinComplexesByProteins(getIndividualProteinsFromProteinGroupKey(protein1)).isEmpty()) {
 				continue;
@@ -74,6 +76,8 @@ public class Dataset {
 			boolean proteinPairValid = false;
 			for (int index2 = 0; index2 < proteinKeys.size(); index2++) {
 				protein2 = proteinKeys.get(index2);
+				// if a referenceDB is present (not null), taking only the proteins that are in
+				// there
 				if (referenceDB != null && referenceDB
 						.getProteinComplexesByProteins(getIndividualProteinsFromProteinGroupKey(protein2)).isEmpty()) {
 					continue;

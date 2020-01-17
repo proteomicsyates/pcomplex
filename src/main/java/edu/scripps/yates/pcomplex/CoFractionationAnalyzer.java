@@ -122,7 +122,7 @@ public class CoFractionationAnalyzer implements TrueClassifier {
 	private static final double maxOverlapScoreInReferenceSet = 0.8;
 	private static final int maxComplexSizeInReferenceSetForLearning = 50;
 	private static final int minComplexSizeInReferenceSetForLearning = 3;
-	private static final int kFoldCrossValidation = 2;
+	private static final int kFoldCrossValidation = 10;
 	private static final double minCorrelationForTraining = 0.5;
 	/******************************/
 
@@ -175,6 +175,11 @@ public class CoFractionationAnalyzer implements TrueClassifier {
 			StringUtils.addIfNotEmpty(sb, "_");
 
 			sb.append("APID");
+		}
+		if (ProteinComplexAnalyzer.useBioPlex) {
+			StringUtils.addIfNotEmpty(sb, "_");
+
+			sb.append("BIOPLEX");
 		}
 		//
 		// parameters from reference database processing
@@ -234,8 +239,10 @@ public class CoFractionationAnalyzer implements TrueClassifier {
 			if (!outputFileNameForMatrix.exists() || outputFileNameForMatrix.length() == 0l) {
 				calculateDistanceMeasurements = true;
 				calculateDistance.add(true);
+				log.info("Measurement to calculate: " + distance);
 			} else {
 				calculateDistance.add(false);
+				log.info("Measurement already calculated (skipping it now):  " + distance);
 			}
 		}
 		if (calculateDistanceMeasurements) {
@@ -273,8 +280,8 @@ public class CoFractionationAnalyzer implements TrueClassifier {
 	}
 
 	/**
-	 * This function will say how many {@link ProteinComplex} are new and how
-	 * many are already in the referenceDB
+	 * This function will say how many {@link ProteinComplex} are new and how many
+	 * are already in the referenceDB
 	 * 
 	 * @param predictedComplexes
 	 * @param referenceDB2
@@ -634,8 +641,9 @@ public class CoFractionationAnalyzer implements TrueClassifier {
 						case CORRELATION_PVALUE:
 							final double pvalue = PearsonCorrelation.getPearsonCorrelationPValue(experiment, protein1,
 									protein2, dataType);
-							distanceMap.get(distance).set(i, j, pvalue);
-							log.debug("pvalue" + "\t" + pvalue);
+							final double minusLog10PValue = -Math.log10(pvalue);
+							distanceMap.get(distance).set(i, j, minusLog10PValue);
+							log.debug("pvalue" + "\t" + pvalue + "\t-log10pvalue=" + minusLog10PValue);
 							break;
 						case EUCLIDEAN_DISTANCE:
 							final double euDistance = EuclideanDistanceCalculator.getEuclideanDistance(experiment,
@@ -704,6 +712,9 @@ public class CoFractionationAnalyzer implements TrueClassifier {
 			throws IOException {
 		log.info("Printing matrix for distance: " + distanceMeasure.name());
 		final File fileOutput = getOutputFileNameForMatrix(distanceMeasure);
+		if (!fileOutput.getParentFile().exists()) {
+			fileOutput.getParentFile().mkdirs();
+		}
 		final FileWriter fw = new FileWriter(fileOutput);
 
 		for (final String acc : proteinList) {
@@ -743,8 +754,8 @@ public class CoFractionationAnalyzer implements TrueClassifier {
 	}
 
 	/**
-	 * The difference, in fractions, between the locations of the maximum values
-	 * of the fractionation profiles of the two proteins
+	 * The difference, in fractions, between the locations of the maximum values of
+	 * the fractionation profiles of the two proteins
 	 * 
 	 * @param exp
 	 * @param acc1
@@ -918,8 +929,8 @@ public class CoFractionationAnalyzer implements TrueClassifier {
 	}
 
 	/**
-	 * Returns the sum of the squares of the distances between the observed and
-	 * the calculated points
+	 * Returns the sum of the squares of the distances between the observed and the
+	 * calculated points
 	 * 
 	 * @param gaussian
 	 * @param obs
@@ -938,9 +949,9 @@ public class CoFractionationAnalyzer implements TrueClassifier {
 	}
 
 	/**
-	 * Returns the sum of the squares of the distances between the entire
-	 * profile and the calculated points, but only taking into account data
-	 * entering on the range of +- 3 sigmas (99.7% of the data)
+	 * Returns the sum of the squares of the distances between the entire profile
+	 * and the calculated points, but only taking into account data entering on the
+	 * range of +- 3 sigmas (99.7% of the data)
 	 * 
 	 * @param gaussian
 	 * @param obs
@@ -964,15 +975,13 @@ public class CoFractionationAnalyzer implements TrueClassifier {
 	}
 
 	/**
-	 * Take the two gaussian fits that are closer in the profiles (closest mean)
-	 * and calculate the euclidean distance between (mu,sigma) vs (mu,sigma) of
-	 * the 2 gaussians.
+	 * Take the two gaussian fits that are closer in the profiles (closest mean) and
+	 * calculate the euclidean distance between (mu,sigma) vs (mu,sigma) of the 2
+	 * gaussians.
 	 * 
-	 * @param fits1
-	 *            an array result of fitting a Gaussian, with first element as
-	 *            height, second as mean and third as sigma
-	 * @param fits2
-	 *            same as fits2 for the second Gaussian
+	 * @param fits1 an array result of fitting a Gaussian, with first element as
+	 *              height, second as mean and third as sigma
+	 * @param fits2 same as fits2 for the second Gaussian
 	 * @return
 	 */
 	private double getDistanceBetweenClosestGaussians(List<MyGaussianFit> fits1, List<MyGaussianFit> fits2) {
@@ -1031,8 +1040,8 @@ public class CoFractionationAnalyzer implements TrueClassifier {
 	}
 
 	/**
-	 * Euclidean distance between the closest (mu,sigma) pairs, where mu and
-	 * sigma are Gaussian parameters fitted to both fractionation profiles
+	 * Euclidean distance between the closest (mu,sigma) pairs, where mu and sigma
+	 * are Gaussian parameters fitted to both fractionation profiles
 	 * 
 	 * @param exp
 	 * @param acc1
@@ -1093,8 +1102,8 @@ public class CoFractionationAnalyzer implements TrueClassifier {
 	}
 
 	/**
-	 * Take all non Nan values from the matrix and normalize them so that the
-	 * mean is 0 and the standard deviation is 1
+	 * Take all non Nan values from the matrix and normalize them so that the mean
+	 * is 0 and the standard deviation is 1
 	 * 
 	 * @param nlMatrix
 	 */
@@ -1129,8 +1138,8 @@ public class CoFractionationAnalyzer implements TrueClassifier {
 	}
 
 	/**
-	 * Take all non Nan values from the matrix and normalize them so that the
-	 * mean is 0 and the standard deviation is 1
+	 * Take all non Nan values from the matrix and normalize them so that the mean
+	 * is 0 and the standard deviation is 1
 	 * 
 	 * @param nlMatrix
 	 */

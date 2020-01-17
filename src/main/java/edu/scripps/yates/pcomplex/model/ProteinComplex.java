@@ -10,6 +10,7 @@ import java.util.Map;
 import java.util.Set;
 
 import org.apache.commons.lang.builder.HashCodeBuilder;
+import org.apache.log4j.Logger;
 
 import edu.scripps.yates.annotations.uniprot.UniprotProteinLocalRetriever;
 import edu.scripps.yates.pcomplex.ProteinComplexAnalyzer;
@@ -29,6 +30,7 @@ import gnu.trove.map.hash.TObjectDoubleHashMap;
 import gnu.trove.set.hash.THashSet;
 
 public class ProteinComplex {
+	private final static Logger log = Logger.getLogger(ProteinComplex.class);
 	public static boolean useGeneToPrint = false;
 	public static String separator = "-";
 
@@ -47,6 +49,7 @@ public class ProteinComplex {
 	private boolean sorted;
 	private boolean removed = false;
 	private String organism;
+	private List<String> componentsAccsAndGenes;
 
 	public ProteinComplex(String id) {
 		this.id = id;
@@ -56,6 +59,9 @@ public class ProteinComplex {
 	public void addComponent(ProteinComponent component) {
 		if (componentSet.contains(component)) {
 			return;
+		}
+		if (component.getAcc() == null && "null".equals(component.getGene())) {
+			log.info("asdf");
 		}
 		sorted = false;
 		key = null;
@@ -96,12 +102,20 @@ public class ProteinComplex {
 	 * @return
 	 */
 	public boolean isFullyRepresented(Set<String> proteinKeys) {
-		for (final String component : componentsByAccAndGene.keySet()) {
+		for (final String component : getComponentsAccAndGenes()) {
 			if (!proteinKeys.contains(component)) {
 				return false;
 			}
 		}
 		return true;
+	}
+
+	private List<String> getComponentsAccAndGenes() {
+		if (componentsAccsAndGenes == null) {
+			componentsAccsAndGenes = new ArrayList<String>();
+			componentsAccsAndGenes.addAll(componentsByAccAndGene.keySet());
+		}
+		return componentsAccsAndGenes;
 	}
 
 	/**
@@ -112,7 +126,7 @@ public class ProteinComplex {
 	 * @return
 	 */
 	public boolean isPartiallyRepresented(Set<String> proteinKeys) {
-		for (final String component : componentsByAccAndGene.keySet()) {
+		for (final String component : getComponentsAccAndGenes()) {
 			if (proteinKeys.contains(component)) {
 				return true;
 			}
@@ -196,20 +210,23 @@ public class ProteinComplex {
 			if (proteinsAndGenes.contains(component.getAcc()) || proteinsAndGenes.contains(component.getGene())) {
 				ret.add(component);
 			} else if (ProteinComplexAnalyzer.ORGANISM != null || getOrganism() != null) {
-				final String organism = ProteinComplexAnalyzer.ORGANISM != null ? ProteinComplexAnalyzer.ORGANISM
-						: getOrganism();
-				final UniprotGeneMapping geneMapping = UniprotGeneMapping
-						.getInstance(new File(ProteinComplexAnalyzer.uniprotReleasesFolder), organism);
-				try {
-					final Set<String> mapGeneToUniprotACC = geneMapping.mapGeneToUniprotACC(component.getGene());
-					for (final String uniprot : mapGeneToUniprotACC) {
-						if (proteinsAndGenes.contains(uniprot)) {
-							ret.add(component);
+				// only if there is either acc or gene missing, otherwise it should be found
+				if (component.getAcc() == null || component.getGene() == null) {
+					final String organism = ProteinComplexAnalyzer.ORGANISM != null ? ProteinComplexAnalyzer.ORGANISM
+							: getOrganism();
+					final UniprotGeneMapping geneMapping = UniprotGeneMapping
+							.getInstance(new File(ProteinComplexAnalyzer.uniprotReleasesFolder), organism);
+					try {
+						final Set<String> mapGeneToUniprotACC = geneMapping.mapGeneToUniprotACC(component.getGene());
+						for (final String uniprot : mapGeneToUniprotACC) {
+							if (proteinsAndGenes.contains(uniprot)) {
+								ret.add(component);
+							}
 						}
+					} catch (final IOException e) {
+						e.printStackTrace();
+					} catch (final IllegalArgumentException e2) {
 					}
-				} catch (final IOException e) {
-					e.printStackTrace();
-				} catch (final IllegalArgumentException e2) {
 				}
 			}
 		}
@@ -261,7 +278,9 @@ public class ProteinComplex {
 
 			@Override
 			public int compare(ProteinComponent o1, ProteinComponent o2) {
-				return o1.getAcc().compareTo(o2.getAcc());
+				final String acc1 = o1.getKey();
+				final String acc2 = o2.getKey();
+				return acc1.compareTo(acc2);
 			}
 		});
 		return ret;
@@ -365,7 +384,8 @@ public class ProteinComplex {
 	public List<String> getComponentListName(boolean useGeneToPrint) {
 		final List<String> ret = new ArrayList<String>();
 		for (final ProteinComponent component : getComponentList()) {
-			ret.add(component.toString(useGeneToPrint));
+			final String componentName = component.toString(useGeneToPrint);
+			ret.add(componentName);
 		}
 		return ret;
 	}
@@ -411,7 +431,12 @@ public class ProteinComplex {
 			if (!"".equals(sb.toString())) {
 				sb.append(separator);
 			}
-			sb.append(pc.getGene());
+			final String gene = pc.getGene();
+			if (gene != null) {
+				sb.append(gene);
+			} else {
+				sb.append(pc.getAcc());
+			}
 		}
 		return sb.toString();
 	}
@@ -422,7 +447,12 @@ public class ProteinComplex {
 			if (!"".equals(sb.toString())) {
 				sb.append(separator);
 			}
-			sb.append(pc.getAcc());
+			final String acc = pc.getAcc();
+			if (acc != null) {
+				sb.append(acc);
+			} else {
+				sb.append(pc.getGene());
+			}
 		}
 		return sb.toString();
 	}

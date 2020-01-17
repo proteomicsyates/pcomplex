@@ -63,6 +63,14 @@ public class ProteinComponent {
 
 	}
 
+	public void setAcc(String acc) {
+		this.acc = acc;
+	}
+
+	public void setGene(String gene) {
+		this.gene = gene;
+	}
+
 	private boolean isInReferenceDB(String acc) {
 
 		for (final ProteinComplexDB db : dbs) {
