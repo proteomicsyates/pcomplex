@@ -106,7 +106,8 @@ public class IP2Util {
 				final String experimentName = lsEntry.getFilename();
 				if (experimentName.contains("HEK") || experimentName.contains("hplc") || experimentName.contains("AS")
 						|| experimentName.contains("AJS") || experimentName.startsWith("Cond_")
-						|| experimentName.startsWith("PT") || experimentName.startsWith("AJS_MB_SEC")) {
+						|| experimentName.startsWith("PT") || experimentName.startsWith("AJS_MB_SEC")
+						|| experimentName.startsWith("AJS_MB")) {
 					experimentNames.add(experimentName);
 				} else {
 					continue;
@@ -117,9 +118,7 @@ public class IP2Util {
 						"Experiment names are not recognized. Come just above this line and modify it accordingly");
 			}
 			for (final String experimentName : experimentNames) {
-				if (experimentName.contains("00_")) {
-					log.info(experimentName);
-				}
+
 				// final int frac =
 				// getFractionNumberFromExperimentName(experimentName);
 				final String searchesPath = projectFullPath + "/" + experimentName + "/search";
@@ -161,7 +160,8 @@ public class IP2Util {
 
 			// sftpChannel.get(fullPathInIP2, outputStream);
 			sftpChannel.exit();
-			log.info("Transfer done.");
+
+			log.info(ret.size() + " different dtaselects out of " + experimentNames.size() + "experiment names");
 
 		} finally {
 			if (sftpIP2 != null) {
@@ -230,7 +230,13 @@ public class IP2Util {
 					final String tmp = matcher4.group(1);
 					return Integer.valueOf(tmp);
 				}
-
+				// such as AJS_MB_28_2020_02_25_10_252010
+				final Pattern patter5 = Pattern.compile("AJS_MB_(\\d+)_.*");
+				final Matcher matcher5 = patter5.matcher(experimentName);
+				if (matcher5.find()) {
+					final String tmp = matcher5.group(1);
+					return Integer.valueOf(tmp);
+				}
 				throw new IllegalArgumentException(
 						"It was not possible to extract fraction number from experiment name: '" + experimentName
 								+ "'");

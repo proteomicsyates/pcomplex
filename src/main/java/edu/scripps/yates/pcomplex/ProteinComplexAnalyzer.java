@@ -84,13 +84,13 @@ public class ProteinComplexAnalyzer {
 			// "WCX_SEC_Tandem", // , // **
 			// "dSEC", // **
 			// "2019_05_17_dSEC" //
-			// "2019_10_14_Mixed_bed_SEC"
+//			"2019_10_14_Mixed_bed_SEC"
 //			"Kirkwood_et_al_Rep1",//
 //			"Kirkwood_et_al_Rep2",//
 //			"Kirkwood_et_al_Rep3",//
-			"Kirkwood_et_al_Rep123" //
-//			"2019_11_19_Mixed_bed_SEC"//
-	};
+//			"Kirkwood_et_al_Rep123" //
+//			"2019_11_19_Mixed_bed_SEC",//
+			"2019_11_19_Mixed_bed_EvoSep" };
 
 	// public static final String[] projectsNames = { //
 	//
@@ -112,7 +112,7 @@ public class ProteinComplexAnalyzer {
 	/*****************************/
 	/** DOWNLOAD FILES **/
 	/*****************************/
-	private static final boolean downloadFiles = false;
+	private static final boolean downloadFiles = true;
 
 	/**
 	 * REFERENCE DATABASES
@@ -343,6 +343,12 @@ public class ProteinComplexAnalyzer {
 		return geneMapping;
 	}
 
+	private File getTotalProteinsFile(String projectName) {
+
+		final String path = downloadFilesPath + File.separator + projectName + "-TotalProteins.txt";
+		return new File(path);
+	}
+
 	private SeparationExperiment analyzeFractions(String projectName) throws IOException {
 		final File projectFolder = getProjectFolder(projectName);
 		final File projectSummaryFile = getProjectSummaryFile(projectName);
@@ -351,6 +357,11 @@ public class ProteinComplexAnalyzer {
 
 		}
 		final SeparationExperiment experiment = loadProjectSummaryFileNEW(projectName, projectSummaryFile);
+		if (experiment.getFractions().isEmpty()) {
+			throw new IllegalArgumentException(
+					"Something went wrong because experiment " + projectName + " doesn't have fractions");
+		}
+		writeTotalProteinFile(experiment, getTotalProteinsFile(projectName));
 		log.info(experiment.getFractions().size() + " fractions in project " + experiment.getProjectName());
 		final File[] dtaSelectFiles = projectFolder.listFiles();
 		downloadUniprotAnnotations(dtaSelectFiles);
@@ -509,6 +520,65 @@ public class ProteinComplexAnalyzer {
 		return experiment;
 	}
 
+	private void writeTotalProteinFile(SeparationExperiment experiment, File totalProteinsFile) throws IOException {
+		final FileWriter fw = new FileWriter(totalProteinsFile);
+		fw.write("ACC\tGene\tMw\tFractions\n");
+		final Set<String> keySet = experiment.getTotalProteinsByAcc().keySet();
+		for (final String acc : keySet) {
+			Protein protein = null;
+			int fractionNumber = 0;
+			final List<Protein> list = experiment.getTotalProteinsByAcc().get(acc);
+
+			while (protein == null) {
+				protein = list.get(fractionNumber);
+				fractionNumber++;
+				if (fractionNumber > list.size() - 1) {
+					break;
+				}
+			}
+			if (protein != null) {
+				if (protein.getAcc().equals("O95400")) {
+					log.info(getFractionsString(list));
+				}
+				final List<String> set = new ArrayList<String>();
+				if (protein.getAcc().contains("#")) {
+					final String[] split = protein.getAcc().split("#");
+					for (final String acc2 : split) {
+						set.add(acc2);
+					}
+				} else {
+					set.add(protein.getAcc());
+				}
+				for (final String acc2 : set) {
+					fw.write(acc2 + "\t" + protein.getGene() + "\t" + protein.getMw() + "\t" + getFractionsString(list)
+							+ "\n");
+				}
+
+			}
+		}
+
+		fw.close();
+		log.info("File with all proteins written at: );" + totalProteinsFile.getAbsolutePath());
+	}
+
+	private String getFractionsString(List<Protein> proteins) {
+		final TIntArrayList fractionNumbers = new TIntArrayList();
+		for (final Protein protein : proteins) {
+			if (protein != null) {
+				fractionNumbers.add(protein.getFractionNumber());
+			}
+		}
+		fractionNumbers.sort();
+		final StringBuilder sb = new StringBuilder();
+		for (final int fractionNumber : fractionNumbers.toArray()) {
+			if (!"".equals(sb.toString())) {
+				sb.append("|");
+			}
+			sb.append(fractionNumber);
+		}
+		return sb.toString();
+	}
+
 	// private void writeSummaryFile(String projectName, File
 	// projectSummaryFile, File projectFolder) throws IOException {
 	// FileWriter fw = null;
@@ -600,7 +670,13 @@ public class ProteinComplexAnalyzer {
 						continue;
 					}
 					final String fileName = FilenameUtils.getBaseName(file.getAbsolutePath());
-					final int fractionNumber = Integer.valueOf(fileName.substring(0, fileName.indexOf("-")));
+
+					int fractionNumber = Integer.valueOf(fileName.substring(0, fileName.indexOf("-")));
+					// because the numeration of the fractions of that experiment started by 0
+					// instead of 1
+					if (fileName.contains("PT15")) {
+						fractionNumber++;
+					}
 					String fractionName = fileName.substring(fileName.indexOf("-") + 1);
 					fractionName = fractionName.substring(0, fractionName.lastIndexOf("-"));
 					fw.write(fractionNumber + "\t" + fractionName);
@@ -1446,7 +1522,7 @@ public class ProteinComplexAnalyzer {
 			final FileWriter fwFraction = new FileWriter(getFractionCompleteProteinComplexesFile(
 					experiment.getProjectName(), fraction, proteinComplexDB, false), false);
 			fwFraction.write(completeComplexes.size() + " complexes are complete in fraction "
-					+ fraction.getFractionNumber() + " " + fraction.getName() + "\n");
+					+ fraction.getFractionNumber() + " " + fraction.getFractionNamesString() + "\n");
 			for (final ProteinComplex proteinComplex : completeComplexes) {
 				fwFraction.write(proteinComplex.toString() + "\n\n");
 			}
@@ -1461,7 +1537,7 @@ public class ProteinComplexAnalyzer {
 			final FileWriter fwFraction = new FileWriter(getFractionPartialProteinComplexesFile(
 					experiment.getProjectName(), fraction, proteinComplexDB, false), false);
 			fwFraction.write(partialComplexes.size() + " complexes are partially present in fraction "
-					+ fraction.getFractionNumber() + " " + fraction.getName() + "\n");
+					+ fraction.getFractionNumber() + " " + fraction.getFractionNamesString() + "\n");
 			for (final ProteinComplex complex : partialComplexes) {
 				fwFraction.write(complex.getId() + " - " + complex.getName() + "\n");
 				fwFraction.write("Present:\n");
@@ -1618,7 +1694,7 @@ public class ProteinComplexAnalyzer {
 						}
 						final int spc = Integer.valueOf(split2[split2.length - 2].trim());
 						final float nsaf = Float.valueOf(split2[split2.length - 1].trim());
-						final Protein protein = new Protein(proteinAcc, gene, mw, spc, nsaf, fractionName);
+						final Protein protein = new Protein(proteinAcc, gene, mw, spc, nsaf, fractionNumber);
 						for (int i = 3; i < split2.length - 2; i++) {
 							final String other = split2[i].trim();
 							protein.addOther(other);

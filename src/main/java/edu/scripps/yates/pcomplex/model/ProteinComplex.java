@@ -50,10 +50,55 @@ public class ProteinComplex {
 	private boolean removed = false;
 	private String organism;
 	private List<String> componentsAccsAndGenes;
+	private double abundance;
+	private boolean known;
+	private String goID;
+	private String corumID;
+	private String intActID;
 
 	public ProteinComplex(String id) {
 		this.id = id;
+		parseID(id);
+	}
 
+	private void parseID(String id2) {
+		final List<String> triplets = new ArrayList<String>();
+		if (id2.contains(",")) {
+			final String[] split = id2.split(",");
+			for (int i = 0; i < split.length; i++) {
+				if (split[i].contains(";")) {
+					triplets.add(split[i]);
+				} else {
+					// in this case, it is because is a comma inside of a triplet, so add it to the
+					// previous one
+					String previousTriplet = triplets.get(triplets.size() - 1);
+					previousTriplet += "," + split[i];
+					triplets.set(triplets.size() - 1, previousTriplet);
+				}
+
+			}
+		} else {
+			triplets.add(id2);
+		}
+		for (final String triplet : triplets) {
+
+			if (triplet.contains(";")) {
+				final String[] split = triplet.split(";");
+				final String idType = split[1];
+				final String id = split[2];
+
+				String name = null;
+				if ("CORUM".equals(idType)) {
+					corumID = id;
+					name = split[3];
+				} else if ("QuickGO".equals(idType)) {
+					goID = id;
+				} else if ("IntAct".equals(idType)) {
+					intActID = id;
+					name = split[3];
+				}
+			}
+		}
 	}
 
 	public void addComponent(ProteinComponent component) {
@@ -485,6 +530,13 @@ public class ProteinComplex {
 		return significance;
 	}
 
+	/**
+	 * Gets the maximum overlap between this complex and a set of complexes in a
+	 * {@link ProteinComplexDB}
+	 * 
+	 * @param db
+	 * @return
+	 */
 	public double getMaxOverlap(ProteinComplexDB db) {
 		if (!maxOverlapsPerDB.containsKey(db.getName())) {
 			double max = -Double.MAX_VALUE;
@@ -515,4 +567,33 @@ public class ProteinComplex {
 		this.organism = organism;
 	}
 
+	public void setAbundance(double abundance) {
+		this.abundance = abundance;
+
+	}
+
+	public double getAbundance() {
+		return abundance;
+	}
+
+	public void setKnown(boolean b) {
+		this.known = b;
+
+	}
+
+	public boolean isKnown() {
+		return known;
+	}
+
+	public boolean isSourceQuickGO() {
+		return goID != null;
+	}
+
+	public boolean isSourceCorum() {
+		return corumID != null;
+	}
+
+	public boolean isSourceIntAct() {
+		return intActID != null;
+	}
 }

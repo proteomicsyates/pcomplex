@@ -49,18 +49,17 @@ public class MutualInformation {
 	}
 
 	/**
-	 * The ratio of the number of fractions in which a protein is present
-	 * divided by the total number of fractions in the experiment
+	 * The ratio of the number of fractions in which a protein is present divided by
+	 * the total number of fractions in the experiment
 	 * 
 	 * @param exp
 	 * @param protein
-	 * @param present
-	 *            if 1, means that we count the number of fractions in which a
-	 *            protein is present. If 0, we count the number of fractions in
-	 *            which a protein is NOT present.
+	 * @param present if 1, means that we count the number of fractions in which a
+	 *                protein is present. If 0, we count the number of fractions in
+	 *                which a protein is NOT present.
 	 */
 	private static double p(SeparationExperiment exp, String protein, int present) {
-		final Set<String> fractions = exp.getFractionsInWhichProteinIsPresent(protein);
+		final Set<Integer> fractions = exp.getFractionsInWhichProteinIsPresent(protein);
 		final int numPresent = fractions.size();
 		final int totalFractions = exp.getFractions().size();
 		if (present == 1) {
@@ -74,26 +73,25 @@ public class MutualInformation {
 	}
 
 	/**
-	 * The ratio of the number of fractions in which a protein is present
-	 * divided by the total number of fractions in the experiment
+	 * The ratio of the number of fractions in which a protein is present divided by
+	 * the total number of fractions in the experiment
 	 * 
 	 * @param exp
 	 * @param protein1
 	 * @param protein2
-	 * @param present
-	 *            if 1, means that we count the number of fractions in which a
-	 *            protein is present. If 0, we count the number of fractions in
-	 *            which a protein is NOT present.
+	 * @param present  if 1, means that we count the number of fractions in which a
+	 *                 protein is present. If 0, we count the number of fractions in
+	 *                 which a protein is NOT present.
 	 */
 	private static double p(SeparationExperiment exp, String protein1, int present1, String protein2, int present2) {
-		final Set<String> fractions1 = exp.getFractionsInWhichProteinIsPresent(protein1);
-		final Set<String> fractions2 = exp.getFractionsInWhichProteinIsPresent(protein2);
-		final TIntObjectHashMap<Set<String>> binaryFractions1 = getBinaryFractions(fractions1, exp.getFractions());
-		final TIntObjectHashMap<Set<String>> binaryFractions2 = getBinaryFractions(fractions2, exp.getFractions());
-		final Set<String> fractionsToConsider1 = binaryFractions1.get(present1);
-		final Set<String> fractionsToConsider2 = binaryFractions2.get(present2);
+		final Set<Integer> fractions1 = exp.getFractionsInWhichProteinIsPresent(protein1);
+		final Set<Integer> fractions2 = exp.getFractionsInWhichProteinIsPresent(protein2);
+		final TIntObjectHashMap<Set<Integer>> binaryFractions1 = getBinaryFractions(fractions1, exp.getFractions());
+		final TIntObjectHashMap<Set<Integer>> binaryFractions2 = getBinaryFractions(fractions2, exp.getFractions());
+		final Set<Integer> fractionsToConsider1 = binaryFractions1.get(present1);
+		final Set<Integer> fractionsToConsider2 = binaryFractions2.get(present2);
 
-		final Set<String> intersection = intersection(fractionsToConsider1, fractionsToConsider2);
+		final Set<Integer> intersection = intersection(fractionsToConsider1, fractionsToConsider2);
 		final int totalFractions = exp.getFractions().size();
 		final double p = 1.0 * intersection.size() / totalFractions;
 		return p;
@@ -101,31 +99,30 @@ public class MutualInformation {
 	}
 
 	/**
-	 * Gets a map in which the key is 1 or 0, for the fractions in which a
-	 * protein is present or is not present respectively
+	 * Gets a map in which the key is 1 or 0, for the fractions in which a protein
+	 * is present or is not present respectively
 	 * 
-	 * @param proteinFractions
-	 *            fractions in which a protein is present
+	 * @param proteinFractions fractions in which a protein is present
 	 * @param totalFractions
 	 * @return
 	 */
-	private static TIntObjectHashMap<Set<String>> getBinaryFractions(Set<String> proteinFractions,
+	private static TIntObjectHashMap<Set<Integer>> getBinaryFractions(Set<Integer> proteinFractions,
 			List<Fraction> totalFractions) {
-		final TIntObjectHashMap<Set<String>> ret = new TIntObjectHashMap<Set<String>>();
-		ret.put(0, new THashSet<String>());
-		ret.put(1, new THashSet<String>());
+		final TIntObjectHashMap<Set<Integer>> ret = new TIntObjectHashMap<Set<Integer>>();
+		ret.put(0, new THashSet<Integer>());
+		ret.put(1, new THashSet<Integer>());
 		for (final Fraction fraction : totalFractions) {
-			if (proteinFractions.contains(fraction.getName())) {
-				ret.get(1).add(fraction.getName());
+			if (proteinFractions.contains(fraction.getFractionNumber())) {
+				ret.get(1).add(fraction.getFractionNumber());
 			} else {
-				ret.get(0).add(fraction.getName());
+				ret.get(0).add(fraction.getFractionNumber());
 			}
 		}
 		return ret;
 	}
 
-	private static Set<String> intersection(Set<String> fractionsToConsider1, Set<String> fractionsToConsider2) {
-		final Set<String> intersection = new THashSet<String>();
+	private static Set<Integer> intersection(Set<Integer> fractionsToConsider1, Set<Integer> fractionsToConsider2) {
+		final Set<Integer> intersection = new THashSet<Integer>();
 		intersection.addAll(fractionsToConsider1);
 		intersection.retainAll(fractionsToConsider2);
 		return intersection;

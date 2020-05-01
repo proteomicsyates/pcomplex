@@ -20,6 +20,14 @@ import gnu.trove.set.hash.THashSet;
 public class ClusterEvaluation {
 	private final static Logger log = Logger.getLogger(ClusterEvaluation.class);
 
+	/**
+	 * Gets the overlap score between 2 complexes: which is (intersection *
+	 * intersection) / (size1 * size2)
+	 * 
+	 * @param complex1
+	 * @param complex2
+	 * @return
+	 */
 	public static double getOverlap(ProteinComplex complex1, ProteinComplex complex2) {
 		final double overlap = getOverlap(complex1.getComponentList(), complex2.getComponentList());
 		return overlap;
@@ -50,6 +58,14 @@ public class ClusterEvaluation {
 		return intersection;
 	}
 
+	/**
+	 * Gets the overlap score, which is (intersection * intersection) / (size1 *
+	 * size2)
+	 * 
+	 * @param componentList1
+	 * @param componentList2
+	 * @return
+	 */
 	private static double getOverlap(List<ProteinComponent> componentList1, List<ProteinComponent> componentList2) {
 		final Set<ProteinComponent> intersection = getIntersection(componentList1, componentList2);
 		final double numerator = 1.0 * intersection.size() * intersection.size();

@@ -4,23 +4,25 @@ import java.io.IOException;
 import java.util.Set;
 
 import edu.scripps.yates.pcomplex.util.DataType;
+import gnu.trove.map.TIntIntMap;
+import gnu.trove.map.hash.TIntIntHashMap;
 import gnu.trove.set.hash.THashSet;
 
 public class Protein extends ProteinComponent {
 
 	private final Set<String> others = new THashSet<String>();
 	private final Double mw;
-	private final int spc;
-	private final float nsaf;
-	private final String fractionName;
+	private final TIntIntMap spcs = new TIntIntHashMap();
+	private float nsaf;
+	private final int fractionNumber;
 
-	public Protein(String acc, String gene, Double mw, int spc, float nsaf, String fractionName) throws IOException {
+	public Protein(String acc, String gene, Double mw, int spc, float nsaf, int fractionNumber) throws IOException {
 		super(acc, gene);
 
 		this.mw = mw;
-		this.spc = spc;
+		this.spcs.put(1, spc);
 		this.nsaf = nsaf;
-		this.fractionName = fractionName;
+		this.fractionNumber = fractionNumber;
 
 	}
 
@@ -36,7 +38,7 @@ public class Protein extends ProteinComponent {
 	public boolean equals(Object obj) {
 		if (obj instanceof Protein) {
 			final Protein p = (Protein) obj;
-			if (p.getAcc().equals(acc) && p.getGene().equals(gene) && p.getFractionName().equals(fractionName)) {
+			if (p.getAcc().equals(acc) && p.getGene().equals(gene) && p.getFractionNumber() == fractionNumber) {
 				if (others.isEmpty() && p.getOthers().isEmpty()) {
 					return true;
 				} else {
@@ -76,15 +78,41 @@ public class Protein extends ProteinComponent {
 	}
 
 	public int getSpc() {
-		return spc;
+		return spcs.get(1);
+	}
+
+	public TIntIntMap getSpcs() {
+		return spcs;
+	}
+
+	/**
+	 * 
+	 * @param rep starting by 1
+	 * @return
+	 */
+	public Integer getSpc(int rep) {
+		if (spcs.containsKey(rep)) {
+			return spcs.get(rep);
+		}
+		return null;
+	}
+
+	public int addSpc(int spc) {
+		final int repNumber = this.spcs.size() + 1;
+		this.spcs.put(repNumber, spc);
+		return repNumber;
 	}
 
 	public float getNSAF() {
 		return nsaf;
 	}
 
-	public String getFractionName() {
-		return fractionName;
+	public void setNSAF(float nsaf) {
+		this.nsaf = nsaf;
+	}
+
+	public int getFractionNumber() {
+		return fractionNumber;
 	}
 
 	public double getData(DataType dataType) {

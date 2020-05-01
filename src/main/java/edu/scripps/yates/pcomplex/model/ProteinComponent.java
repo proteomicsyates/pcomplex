@@ -16,11 +16,19 @@ public class ProteinComponent {
 	private String proteinName;
 	private String toString;
 	private int hashCode = -1;
+	private final String rawAcc; // acc that can contain more than one accession separated by #
+	private List<String> individualAccs;
+
 	// to use such as when there is an ambiguity, we remove one by keeping the
 	// protein that is in the reference database.
 	public static List<ProteinComplexDB> dbs = new ArrayList<ProteinComplexDB>();
 
 	public ProteinComponent(String acc, String gene) throws IOException {
+		if (acc != null) {
+			this.rawAcc = acc;
+		} else {
+			this.rawAcc = gene;
+		}
 		this.acc = chooseOne(acc);
 		this.gene = chooseOne(gene);
 		// deal with ambiguities and select one
@@ -103,6 +111,11 @@ public class ProteinComponent {
 		}
 	}
 
+	/**
+	 * Note that it may contain '#' having multiple accessions
+	 * 
+	 * @return
+	 */
 	public String getAcc() {
 		return acc;
 	}
@@ -159,6 +172,30 @@ public class ProteinComponent {
 
 	public void setProteinName(String proteinName) {
 		this.proteinName = proteinName;
+	}
+
+	/**
+	 * gets the acc that can contain more than one accession separated by #
+	 * 
+	 * @return
+	 */
+	public String getRawAcc() {
+		return rawAcc;
+	}
+
+	public List<String> getInvidualAccs() {
+		if (individualAccs == null) {
+			individualAccs = new ArrayList<String>();
+			if (rawAcc.contains(ProteinComplexAnalyzer.AMBIGUOUS_SEPARATOR)) {
+				final String[] split = rawAcc.split(ProteinComplexAnalyzer.AMBIGUOUS_SEPARATOR);
+				for (final String acc : split) {
+					individualAccs.add(acc);
+				}
+			} else {
+				individualAccs.add(rawAcc);
+			}
+		}
+		return individualAccs;
 	}
 
 }

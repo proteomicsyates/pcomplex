@@ -18,14 +18,15 @@ import edu.scripps.yates.pcomplex.util.DataType;
 import gnu.trove.list.TDoubleList;
 import gnu.trove.list.array.TDoubleArrayList;
 import gnu.trove.map.hash.THashMap;
+import gnu.trove.map.hash.TIntObjectHashMap;
 import gnu.trove.set.hash.THashSet;
 import smile.netlib.NLMatrix;
 
 public class SeparationExperiment {
 
 	private final List<Fraction> fractions = new ArrayList<Fraction>();
-	private final Map<String, Fraction> fractionsByName = new THashMap<String, Fraction>();
-	private final Map<String, Set<Fraction>> fractionNumbersByProteinAccs = new THashMap<String, Set<Fraction>>();
+	private final TIntObjectHashMap<Fraction> fractionsByNumber = new TIntObjectHashMap<Fraction>();
+	private final Map<String, Set<Fraction>> fractionsByProteinAccs = new THashMap<String, Set<Fraction>>();
 	private final String projectName;
 	private final static Logger log = Logger.getLogger(SeparationExperiment.class);
 	private static final int MIN_CONSECUTIVE_NON_ZERO_FRACTIONS = 2;
@@ -33,7 +34,7 @@ public class SeparationExperiment {
 	private final List<String> proteinACCList = new ArrayList<String>();
 	private NLMatrix doubleNormalizedProfiles;
 	private NLMatrix normalizedProfiles;
-	private final Map<String, Set<String>> fractionNamesPerProteinAcc = new THashMap<String, Set<String>>();
+	private final Map<String, Set<Integer>> fractionNamesPerProteinAcc = new THashMap<String, Set<Integer>>();
 	private File experimentFile;
 	private Map<String, List<Protein>> totalProteinsByAcc;
 
@@ -51,20 +52,22 @@ public class SeparationExperiment {
 			proteinACCList.add(acc);
 		}
 		proteinList.add(protein);
-		if (fractionsByName.containsKey(fractionName)) {
-			fractionsByName.get(fractionName).addProtein(protein);
+		if (fractionsByNumber.containsKey(fractionNumber)) {
+			fractionsByNumber.get(fractionNumber).addProtein(protein);
+			fractionsByNumber.get(fractionNumber).addFractionName(fractionName);
 		} else {
+
 			final Fraction fraction = new Fraction(fractionName, fractionNumber);
 			fraction.addProtein(protein);
-			fractionsByName.put(fractionName, fraction);
+			fractionsByNumber.put(fractionNumber, fraction);
 			fractions.add(fraction);
 		}
-		if (fractionNumbersByProteinAccs.containsKey(acc)) {
-			fractionNumbersByProteinAccs.get(acc).add(fractionsByName.get(fractionName));
+		if (fractionsByProteinAccs.containsKey(acc)) {
+			fractionsByProteinAccs.get(acc).add(fractionsByNumber.get(fractionNumber));
 		} else {
 			final Set<Fraction> fractions = new THashSet<Fraction>();
-			fractions.add(fractionsByName.get(fractionName));
-			fractionNumbersByProteinAccs.put(acc, fractions);
+			fractions.add(fractionsByNumber.get(fractionNumber));
+			fractionsByProteinAccs.put(acc, fractions);
 		}
 	}
 
@@ -76,8 +79,8 @@ public class SeparationExperiment {
 		return fractions;
 	}
 
-	public Map<String, Fraction> getFractionsByName() {
-		return fractionsByName;
+	public Fraction getFraction(int fractionNumber) {
+		return fractions.stream().filter(f -> f.getFractionNumber() == fractionNumber).findAny().get();
 	}
 
 	public String getProjectName() {
@@ -131,7 +134,7 @@ public class SeparationExperiment {
 				}
 				ret.put(acc, list);
 			}
-			final int indexOf = sortedFractions.indexOf(fractionsByName.get(protein.getFractionName()));
+			final int indexOf = sortedFractions.indexOf(fractionsByNumber.get(protein.getFractionNumber()));
 			final List<Protein> list = ret.get(acc);
 			list.set(indexOf, protein);
 		}
@@ -221,7 +224,7 @@ public class SeparationExperiment {
 			// get the minimum non zero value and calculate the factor by which
 			// we have to multiply
 			double min = Double.MAX_VALUE;
-			for (final String acc : fractionNumbersByProteinAccs.keySet()) {
+			for (final String acc : fractionsByProteinAccs.keySet()) {
 				double minOfTheProtein = Double.MAX_VALUE;
 				int numConsecutiveNonZeroFractions = 0;
 				for (final Fraction fraction : fractionsSorted) {
@@ -251,7 +254,7 @@ public class SeparationExperiment {
 
 		// take all acccessions in the experiment
 		final List<String> accs = new ArrayList<String>();
-		accs.addAll(fractionNumbersByProteinAccs.keySet());
+		accs.addAll(fractionsByProteinAccs.keySet());
 		// sort them alphabetically
 		Collections.sort(accs);
 		// open file to write
@@ -418,10 +421,11 @@ public class SeparationExperiment {
 		return ret;
 	}
 
-	public Set<String> getFractionsInWhichProteinIsPresent(String acc) {
+	public Set<Integer> getFractionsInWhichProteinIsPresent(String acc) {
 		if (!fractionNamesPerProteinAcc.containsKey(acc)) {
-			final Set<String> fractions = getTotalProteinsByAcc().get(acc).stream().filter(p -> p != null)
-					.map(p -> p.getFractionName()).filter(f -> f != null).collect(Collectors.toSet());
+			final Set<Integer> fractions = getTotalProteinsByAcc().get(acc).stream().filter(p -> p != null)
+					.map(p -> p.getFractionNumber()).collect(Collectors.toSet());
+
 			fractionNamesPerProteinAcc.put(acc, fractions);
 		}
 		return fractionNamesPerProteinAcc.get(acc);

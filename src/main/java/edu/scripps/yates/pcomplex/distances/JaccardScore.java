@@ -17,8 +17,8 @@ public class JaccardScore {
 	 * @return
 	 */
 	public static double getJaccardScore(SeparationExperiment exp, String protein1, String protein2) {
-		final Set<String> fractions1 = exp.getFractionsInWhichProteinIsPresent(protein1);
-		final Set<String> fractions2 = exp.getFractionsInWhichProteinIsPresent(protein2);
+		final Set<Integer> fractions1 = exp.getFractionsInWhichProteinIsPresent(protein1);
+		final Set<Integer> fractions2 = exp.getFractionsInWhichProteinIsPresent(protein2);
 
 		final double distance = 1 - JaccardDistance.d(fractions1, fractions2);
 
