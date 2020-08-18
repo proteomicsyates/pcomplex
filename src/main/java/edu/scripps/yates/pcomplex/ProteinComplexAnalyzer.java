@@ -90,7 +90,8 @@ public class ProteinComplexAnalyzer {
 //			"Kirkwood_et_al_Rep3",//
 //			"Kirkwood_et_al_Rep123" //
 //			"2019_11_19_Mixed_bed_SEC",//
-			"2019_11_19_Mixed_bed_EvoSep" };
+//			"2019_11_19_Mixed_bed_EvoSep", //
+			"08_13_2020_MB_SEC_Fractions" };
 
 	// public static final String[] projectsNames = { //
 	//
@@ -100,9 +101,12 @@ public class ProteinComplexAnalyzer {
 	public static String ORGANISM = "Human";
 	private static boolean runOverlapping = false;
 
-	public static String basePath = "Z:\\share\\Salva\\data\\asaviola\\protein complexes";
+//	public static String basePath = "Z:\\share\\Salva\\data\\asaviola\\protein complexes";
+	public static String basePath = "C:\\Users\\salvador\\Desktop\\Anthony\\protein_complexes";
 	public static String downloadFilesPath = basePath + "\\experiments";
-	public static final String uniprotReleasesFolder = "Z:\\share\\Salva\\data\\uniprotKB";
+//	public static String uniprotReleasesFolder = "Z:\\share\\Salva\\data\\uniprotKB";
+	public static String uniprotReleasesFolder = "C:\\Users\\salvador\\Desktop\\uniprotKB";
+
 	private static int defaultMinNumComponentsInComplex = 2;
 	private final static DateFormat datef = new SimpleDateFormat("MM-dd-yyyy HH_mm_ss");
 	private static DecimalFormat df = new DecimalFormat("#.#");
@@ -112,7 +116,7 @@ public class ProteinComplexAnalyzer {
 	/*****************************/
 	/** DOWNLOAD FILES **/
 	/*****************************/
-	private static final boolean downloadFiles = true;
+	private static final boolean downloadFiles = false;
 
 	/**
 	 * REFERENCE DATABASES
@@ -719,13 +723,14 @@ public class ProteinComplexAnalyzer {
 										}
 									}
 								}
-								final Set<String> ensgids = UniprotEntryUtil.getENSGIDs(entry);
-								for (final String ensgid : ensgids) {
-									if (!"".equals(others.toString())) {
-										others.append(AMBIGUOUS_SEPARATOR);
+								final Set<String> ensgids = UniprotEntryUtil.getENSGIDs(entry).get(proteinACC);
+								if (ensgids != null) {
+									for (final String ensgid : ensgids) {
+										if (!"".equals(others.toString())) {
+											others.append(AMBIGUOUS_SEPARATOR);
+										}
+										others.append(ensgid);
 									}
-									others.append(ensgid);
-
 								}
 							}
 							geneNames.add(geneName);
