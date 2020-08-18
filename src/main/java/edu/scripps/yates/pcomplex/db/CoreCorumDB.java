@@ -26,6 +26,18 @@ public class CoreCorumDB extends ProteinComplexDB {
 	private boolean isloaded = false;
 	private final File inputFile;
 
+	/**
+	 * 
+	 * @param inputFile
+	 * @param organism
+	 * @param uplr
+	 * @param filterByPurificationMethod if true, it only takes the entries from the
+	 *                                   Corum database that have a valid "Protein
+	 *                                   complex purification method" according to a
+	 *                                   file provided in the same folder called
+	 *                                   "valid.txt"
+	 * @throws IOException
+	 */
 	public CoreCorumDB(File inputFile, String organism, UniprotProteinLocalRetriever uplr,
 			boolean filterByPurificationMethod) throws IOException {
 
