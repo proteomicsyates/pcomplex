@@ -91,7 +91,8 @@ public class ProteinComplexAnalyzer {
 //			"Kirkwood_et_al_Rep123" //
 //			"2019_11_19_Mixed_bed_SEC",//
 //			"2019_11_19_Mixed_bed_EvoSep", //
-			"08_13_2020_MB_SEC_Fractions" };
+//			"08_13_2020_MB_SEC_Fractions",//
+			"Beta_cell_PCP" };
 
 	// public static final String[] projectsNames = { //
 	//
@@ -117,6 +118,16 @@ public class ProteinComplexAnalyzer {
 	/** DOWNLOAD FILES **/
 	/*****************************/
 	private static final boolean downloadFiles = false;
+
+	/*****************************/
+	/**
+	 * if we want to force to download DTASelects from an specific database, use
+	 * this. The rest of DTASelect in an experiment, will be deleted and ignored.
+	 *****************************/
+//	private final String databaseRequirement = "Mus_musculus_reviewed_";
+	private final String databaseRequirement = "Uniprot_human_reviewed";
+	// ** just grab the latest search on each experiment **/
+	private final boolean keepOnlyLatestSearch = true;
 
 	/**
 	 * REFERENCE DATABASES
@@ -146,7 +157,7 @@ public class ProteinComplexAnalyzer {
 
 			// basePath = "Z:\\share\\Salva\\data\\jim\\proteinComplexes";
 			downloadFilesPath = basePath + "\\experiments";
-			experimentNamePattern = "Cond_D_Rep_4_";
+//			experimentNamePattern = "Cond_D_Rep_4_";
 			final ProteinComplexAnalyzer pcan = new ProteinComplexAnalyzer(defaultMinNumComponentsInComplex);
 			// USING CRITERIA
 			pcan.setProteinComplexExistenceCriteria(new ProteinComplexExistenceCriteria());
@@ -366,6 +377,7 @@ public class ProteinComplexAnalyzer {
 			throw new IllegalArgumentException(
 					"Something went wrong because experiment " + projectName + " doesn't have fractions");
 		}
+		calculateNSAFValues(experiment);
 		writeTotalProteinFile(experiment, getTotalProteinsFile(projectName));
 		log.info(experiment.getFractions().size() + " fractions in project " + experiment.getProjectName());
 		final File[] dtaSelectFiles = projectFolder.listFiles();
@@ -523,6 +535,22 @@ public class ProteinComplexAnalyzer {
 		}
 
 		return experiment;
+	}
+
+	private void calculateNSAFValues(SeparationExperiment experiment) {
+		log.info("Calculating NSAF values...");
+		final ComplexNSAFCalculator nsafCalculator = new ComplexNSAFCalculator(null, experiment, ComplexFileType.EPIC,
+				ProteinComplexAnalyzer.uniprotReleasesFolder);
+		final List<Fraction> fractions = experiment.getSortedFractions();
+		for (final Fraction fraction : fractions) {
+			final Set<Protein> proteins = fraction.getProteins();
+			for (final Protein protein : proteins) {
+				final Double nsaf = nsafCalculator.calculateProteinNSAF(protein, fraction, 1);
+				protein.setNSAF(nsaf.floatValue());
+			}
+
+		}
+		log.info("NSAF values calculated");
 	}
 
 	private void writeTotalProteinFile(SeparationExperiment experiment, File totalProteinsFile) throws IOException {
@@ -1672,6 +1700,7 @@ public class ProteinComplexAnalyzer {
 
 	public static SeparationExperiment loadProjectSummaryFileNEW(String projectName, File projectSummaryFile)
 			throws IOException {
+		log.info("Loading experiment from file: " + projectSummaryFile.getAbsolutePath());
 		final SeparationExperiment ret = new SeparationExperiment(projectName);
 		ret.setFile(projectSummaryFile);
 		BufferedReader br = null;
@@ -1723,7 +1752,8 @@ public class ProteinComplexAnalyzer {
 	}
 
 	private void downloadFiles(IP2Util ip2Util, String projectName) throws IOException, JSchException, SftpException {
-		final Map<String, String> dtaSelectsInProject = ip2Util.getDTASelectsInProject();
+		final Map<String, List<String>> dtaSelectsInProject = ip2Util.getDTASelectsInProject(
+				this.keepOnlyLatestSearch || this.databaseRequirement == null || "".equals(this.databaseRequirement));
 
 		for (final String experimentName : dtaSelectsInProject.keySet()) {
 			try {
@@ -1733,27 +1763,52 @@ public class ProteinComplexAnalyzer {
 					throw new IllegalArgumentException("Fraction number is " + fraction + ". is that ok?");
 				}
 				log.info(fraction + "-\t" + experimentName);
-				final File outputFile = getexperimentalDataOutputFile(projectName, experimentName,
-						experimentNamePattern);
-				final OutputStream outputStream = new FileOutputStream(outputFile, false);
-				ip2Util.download(dtaSelectsInProject.get(experimentName), outputStream);
-				if (!outputFile.exists() || outputFile.length() == 0l) {
-					throw new IllegalArgumentException(
-							"Some error happened downloading the DTASelect " + dtaSelectsInProject.get(experimentName));
-				}
-				final DTASelectParser parser = new DTASelectParser(outputFile);
-				final List<String> commandLineParameterStrings = parser.getCommandLineParameterStrings();
-				for (final String param : commandLineParameterStrings) {
-					if (param.trim().startsWith("-p")) {
-						if (param.trim().startsWith("-p 2")) {
-							// discarding that file
-							outputFile.delete();
-							log.info(outputFile.getAbsolutePath()
-									+ " deleted because it has not correct search parameters (-p 2)");
+				final List<String> dtaSelectsInExperiment = dtaSelectsInProject.get(experimentName);
+				int numSearch = 1;
+				for (final String dtaSelectInExperiment : dtaSelectsInExperiment) {
+
+					final File outputFile = getexperimentalDataOutputFile(projectName, experimentName,
+							dtaSelectInExperiment, experimentNamePattern);
+					final OutputStream outputStream = new FileOutputStream(outputFile, false);
+					ip2Util.download(dtaSelectInExperiment, outputStream);
+					outputStream.close();
+					if (!outputFile.exists() || outputFile.length() == 0l) {
+						throw new IllegalArgumentException(
+								"Some error happened downloading the DTASelect " + dtaSelectsInExperiment);
+					}
+					final DTASelectParser parser = new DTASelectParser(outputFile);
+					if (databaseRequirement != null && !parser.getFastaPath().contains(databaseRequirement)) {
+						final boolean deleted = outputFile.delete();
+						if (!deleted) {
+							log.info("Not deleted!!");
+						}
+						log.info(outputFile.getAbsolutePath()
+								+ " deleted because it has not correct database searched: '" + parser.getFastaPath()
+								+ "' and should be '" + databaseRequirement + "'");
+						continue;
+					}
+					final List<String> commandLineParameterStrings = parser.getCommandLineParameterStrings();
+					for (final String param : commandLineParameterStrings) {
+						if (param.trim().startsWith("-p")) {
+							if (param.trim().startsWith("-p 2")) {
+								// discarding that file
+								outputFile.delete();
+								log.info(outputFile.getAbsolutePath()
+										+ " deleted because it has not correct search parameters (-p 2)");
+								continue;
+							}
 						}
 					}
+					if (databaseRequirement != null && !"".equals(databaseRequirement) && numSearch > 1) {
+						// delete it because then we have more than one
+						final boolean deleted = outputFile.delete();
+						if (!deleted) {
+							log.info("Not deleted!!");
+						}
+						continue;
+					}
+					numSearch++;
 				}
-
 			} catch (final IllegalArgumentException e) {
 				if (experimentNamePattern == null) {
 					e.printStackTrace();
@@ -1803,13 +1858,16 @@ public class ProteinComplexAnalyzer {
 		return new File(path);
 	}
 
-	private File getexperimentalDataOutputFile(String projectName, String experimentName,
+	private File getexperimentalDataOutputFile(String projectName, String experimentName, String dtaselectFullPath,
 			String experimentNamePattern) {
+		// take search number
+		final String dtaSelectParentFolder = new File(dtaselectFullPath).getParent();
+		final String searchNumber = dtaSelectParentFolder.substring(dtaSelectParentFolder.lastIndexOf("_") + 1);
 		final int fractionNumber = IP2Util.getFractionNumberFromExperimentName(experimentName, experimentNamePattern);
 		final File projectFolder = getProjectFolder(projectName);
 		projectFolder.mkdirs();
 		final String path = projectFolder.getAbsolutePath() + File.separator + fractionNumber + "-" + experimentName
-				+ "-DTASelect.txt";
+				+ "-" + searchNumber + "-DTASelect.txt";
 		return new File(path);
 	}
 
