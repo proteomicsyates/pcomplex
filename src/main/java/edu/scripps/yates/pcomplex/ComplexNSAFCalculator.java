@@ -38,8 +38,8 @@ import gnu.trove.set.hash.THashSet;
  */
 public class ComplexNSAFCalculator {
 
-	private static final String uniprotFolder = "Z:\\share\\Salva\\data\\uniprotKB";
-	private static final String experimentFilesFolder = "Z:\\share\\Salva\\data\\asaviola\\protein complexes\\experiments";
+	private static final String uniprotFolder = "C:\\Users\\salvador\\Desktop\\uniprotKB";
+	private static final String experimentFilesFolder = "C:\\Users\\salvador\\Desktop\\Anthony\\protein_complexes\\experiments";
 	private final File complexListFile;
 	private final SeparationExperiment separationExperiment;
 	private File outputFile;
@@ -50,6 +50,7 @@ public class ComplexNSAFCalculator {
 
 	public static void main(String[] args) {
 		try {
+			// this can be the epic folder
 			final File complexListFile = new File(args[0]);
 			final SeparationExperiment separationExperiment = getSeparationExperiment(args[1]);
 			final ComplexFileType complexFileType = ComplexFileType.valueOf(args[2]);
@@ -123,7 +124,7 @@ public class ComplexNSAFCalculator {
 			throws IOException {
 		switch (complexFileType) {
 		case EPIC:
-			return EpicResultComparator.readProteinComplexes(epicFolder);
+			return EpicResultComparator.readPredictedProteinComplexes(epicFolder);
 
 		case PRINCE:
 			throw new IllegalArgumentException(complexFileType + " not supported...yet.");
@@ -222,13 +223,14 @@ public class ComplexNSAFCalculator {
 	}
 
 	/**
-	 * NSAF for a complex is the sum of the NSAF of its components
+	 * NSAF for a complex is the sum of the NSAF of its components divided by the
+	 * number of components in the complex
 	 * 
 	 * @param proteinComplex
 	 * @param separationExperiment
 	 * @return
 	 */
-	private double calculateComplexNSAF(ProteinComplex proteinComplex, SeparationExperiment separationExperiment) {
+	public double calculateComplexNSAF(ProteinComplex proteinComplex, SeparationExperiment separationExperiment) {
 		double complexNSAF = 0.0;
 		for (final ProteinComponent component : proteinComplex.getComponentList()) {
 			final List<Fraction> fractions = separationExperiment.getFractions();
@@ -253,6 +255,7 @@ public class ComplexNSAFCalculator {
 				}
 			}
 		}
+		complexNSAF = complexNSAF / proteinComplex.getComponentList().size();
 		return complexNSAF;
 	}
 
@@ -289,6 +292,32 @@ public class ComplexNSAFCalculator {
 		} else {
 			return Double.NaN;
 		}
+		final double length = getLength(acc);
+		final double numerator = spc * 1.0 / length;
+
+		return numerator / denominatorSum;
+
+	}
+
+	public double calculateProteinNSAF(Protein protein, Fraction fraction, int replicate) {
+		// get annotations at once first
+		if (!uniprotAnnotationsLoaded) {
+			uplr.getAnnotatedProteins(null, separationExperiment.getProteinACCList());
+			uniprotAnnotationsLoaded = true;
+		}
+		final double denominatorSum = getDenominatorSum(fraction, replicate);
+
+		Integer spc = 0;
+
+		if (protein != null) {
+			spc = protein.getSpc(replicate);
+			if (spc == null) {
+				return Double.NaN;
+			}
+		} else {
+			return Double.NaN;
+		}
+		final String acc = protein.getAcc();
 		final double length = getLength(acc);
 		final double numerator = spc * 1.0 / length;
 

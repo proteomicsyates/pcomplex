@@ -81,7 +81,7 @@
       <dependency>
       	<groupId>org.proteored</groupId>
       	<artifactId>pacom</artifactId>
-      	<version>1.87</version>
+      	<version>1.89</version>
       </dependency>
   </dependencies>
 </project>

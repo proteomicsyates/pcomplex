@@ -84,11 +84,11 @@ public class EpicResultComparator {
 	public File compareWithOtherEPICResult(File epicResultsFolder2) throws IOException {
 
 		final String experimentName1 = getExperimentName(epicResultsFolder);
-		final List<ProteinComplex> complexes1 = readProteinComplexes(epicResultsFolder);
+		final List<ProteinComplex> complexes1 = readPredictedProteinComplexes(epicResultsFolder);
 		Set<Object> set1 = complexes1.stream().map(c -> c.getId()).collect(Collectors.toSet());
 
 		final String experimentName2 = getExperimentName(epicResultsFolder2);
-		final List<ProteinComplex> complexes2 = readProteinComplexes(epicResultsFolder2);
+		final List<ProteinComplex> complexes2 = readPredictedProteinComplexes(epicResultsFolder2);
 		Set<Object> set2 = complexes2.stream().map(c -> c.getId()).collect(Collectors.toSet());
 
 		final File outputFile = new File(
@@ -218,7 +218,7 @@ public class EpicResultComparator {
 		writeSummaryHeaderLine(fw, dBs);
 		for (final File folder : folders) {
 			final String experimentName = getExperimentName(folder);
-			final File complexesFile = getComplexesFile(folder);
+			final File complexesFile = getPredictedComplexesFile(folder);
 			final List<ProteinComplex> complexes = readComplexes(complexesFile);
 
 			final EpicSummary epicSummary = new EpicSummary(getSummaryFile(folder));
@@ -286,9 +286,9 @@ public class EpicResultComparator {
 
 	/**
 	 * Reads protein complexes from file typically called Out.rf.ref_complexes.txt
-	 * that is suppose to contain known protein complexes from EPIC results, having
-	 * the complex ID name at the first column and all the components in the second
-	 * column, separated by ","
+	 * that is suppose to contain known protein complexes that are used as
+	 * reference, having the complex ID name at the first column and all the
+	 * components in the second column, separated by ","
 	 * 
 	 * @param complexesFile
 	 * @return
@@ -317,26 +317,58 @@ public class EpicResultComparator {
 		return ret;
 	}
 
-	public static List<ProteinComplex> readProteinComplexes(File epicFolder) throws IOException {
+	public static List<ProteinComplex> readPredictedProteinComplexes(File epicFolder) throws IOException {
 
 		if (epicFolder.isFile()) {
+
+			final String fileName = FilenameUtils.getName(epicFolder.getAbsolutePath());
+			if (fileName.endsWith("ref_complexes.txt")) {
+				final List<ProteinComplex> knownComplexes = EpicResultComparator
+						.readComplexesFromRefComplexesFile(epicFolder);
+				return knownComplexes;
+			} else if (fileName.endsWith("clust.txt")) {
+				final List<ProteinComplex> unknownComplexes = EpicResultComparator
+						.readComplexesFromClustFile(epicFolder);
+				return unknownComplexes;
+			}
 			throw new IllegalArgumentException(epicFolder.getAbsolutePath()
-					+ " MUST be a folder in which EPIC results are stored (Out.rf.ref_complexes.txt and Out.rf.exp.clust.txt");
+					+ " MUST be a folder in which EPIC results are stored (Out.rf.ref_complexes.txt and Out.rf.exp.clust.txt) or one of these two files");
 		}
 
-		final List<ProteinComplex> knownComplexes = EpicResultComparator.readComplexesFromRefComplexesFile(
-				new File(epicFolder.getAbsolutePath() + File.separator + "Out.rf.ref_complexes.txt"));
-		final List<ProteinComplex> unknownComplexes = EpicResultComparator.readComplexesFromExpClustFile(
-				new File(epicFolder.getAbsolutePath() + File.separator + "Out.rf.exp.clust.txt"));
+		final List<ProteinComplex> referenceComplexes = EpicResultComparator
+				.readComplexesFromRefComplexesFile(getReferenceComplexFile(epicFolder));
+		final List<ProteinComplex> predictedComplexes = EpicResultComparator
+				.readComplexesFromClustFile(getPredictedComplexesFile(epicFolder));
 
-		final List<ProteinComplex> ret = new ArrayList<ProteinComplex>();
-		ret.addAll(knownComplexes);
-		ret.addAll(unknownComplexes);
-		return ret;
+		// we mark as known the ones that have an overlap of at least 0.25 with at least
+		// one known complex from the reference
+		int known = 0;
+		for (final ProteinComplex predicted : predictedComplexes) {
+			for (final ProteinComplex reference : referenceComplexes) {
+				final double overlap = ClusterEvaluation.getOverlap(predicted, reference);
+				if (overlap >= 0.25) {
+					predicted.setKnown(true);
+					predicted.setId(predicted.getId() + " (overlap " + overlap + " with " + reference.getId() + ")");
+					known++;
+					break;
+				}
+			}
+		}
+		log.info(predictedComplexes.size() + " complexes, (" + known + " known and "
+				+ (predictedComplexes.size() - known) + " novel) from EPIC results in " + epicFolder.getAbsolutePath());
+		return predictedComplexes;
 
 	}
 
-	private File[] getfilesEndingWith(File folder, String suffix) {
+	public static File getReferenceComplexFile(File epicFolder) {
+		final File[] files = getfilesEndingWith(epicFolder, "ref_complexes.txt");
+		if (files.length > 0) {
+			return files[0];
+		}
+		return null;
+	}
+
+	private static File[] getfilesEndingWith(File folder, String suffix) {
 		final File[] files = folder.listFiles(new FilenameFilter() {
 
 			@Override
@@ -350,30 +382,39 @@ public class EpicResultComparator {
 		return files;
 	}
 
-	private File getSummaryFile(File folder) {
-		return getfilesEndingWith(folder, "Summary.txt")[0];
+	public static File getSummaryFile(File folder) {
+		final File[] files = getfilesEndingWith(folder, "Summary.txt");
+		if (files.length > 0) {
+			return files[0];
+		}
+		return files[0];
 	}
 
-	private File getComplexesFile(File folder) {
-		return getfilesEndingWith(folder, "clust.txt")[0];
+	public static File getPredictedComplexesFile(File folder) {
+		final File[] files = getfilesEndingWith(folder, "clust.txt");
+		if (files.length > 0) {
+			return files[0];
+		}
+		return files[0];
 	}
 
 	/**
-	 * Reads protein complexes from file typically called Out.rf.exp.clust.txt that
-	 * is suppose to contain unknown protein complexes from EPIC results, each line
-	 * being a complex in which its components are separated in different columns
+	 * Reads protein complexes from file typically called Out.rf.exp.clust.txt or
+	 * Out.rf.comb.clust.txt that is suppose to contain unknown protein complexes
+	 * from EPIC results, each line being a complex in which its components are
+	 * separated in different columns
 	 * 
-	 * @param expClustFile
+	 * @param clustFile
 	 * @return
 	 * @throws IOException
 	 */
-	public static List<ProteinComplex> readComplexesFromExpClustFile(File expClustFile) throws IOException {
+	public static List<ProteinComplex> readComplexesFromClustFile(File clustFile) throws IOException {
 		final List<ProteinComplex> ret = new ArrayList<ProteinComplex>();
-		final List<String> lines = Files.readAllLines(expClustFile.toPath());
+		final List<String> lines = Files.readAllLines(clustFile.toPath());
 		int num = 1;
 		for (final String line : lines) {
 
-			final ProteinComplex complex = new ProteinComplex("Unknown " + num++);
+			final ProteinComplex complex = new ProteinComplex("Predicted-" + num++);
 			complex.setKnown(false);
 			final String[] split = line.split("\t");
 			for (int i = 0; i < split.length; i++) {
@@ -386,7 +427,7 @@ public class EpicResultComparator {
 			}
 			ret.add(complex);
 		}
-		log.info(ret.size() + " unknown protein complexes read from file " + expClustFile.getAbsolutePath());
+		log.info(ret.size() + " predicted protein complexes read from file " + clustFile.getAbsolutePath());
 		return ret;
 	}
 
