@@ -93,8 +93,19 @@ public class IP2Util {
 		}
 	}
 
-	public Map<String, String> getDTASelectsInProject() throws JSchException, IOException, SftpException {
-		final Map<String, String> ret = new THashMap<String, String>();
+	/**
+	 * 
+	 * @param keepOnlyLatest if true, only the dtaselect with the highest number
+	 *                       will be returned. If false, all of them will be
+	 *                       returned and they will be probably be filtered later
+	 * @return
+	 * @throws JSchException
+	 * @throws IOException
+	 * @throws SftpException
+	 */
+	public Map<String, List<String>> getDTASelectsInProject(boolean keepOnlyLatest)
+			throws JSchException, IOException, SftpException {
+		final Map<String, List<String>> ret = new THashMap<String, List<String>>();
 		Session sftpIP2 = null;
 		try {
 			sftpIP2 = loginToIP2();
@@ -107,7 +118,7 @@ public class IP2Util {
 				if (experimentName.contains("HEK") || experimentName.contains("hplc") || experimentName.contains("AS")
 						|| experimentName.contains("AJS") || experimentName.startsWith("Cond_")
 						|| experimentName.startsWith("PT") || experimentName.startsWith("AJS_MB_SEC")
-						|| experimentName.startsWith("AJS_MB")) {
+						|| experimentName.startsWith("AJS_MB") || experimentName.startsWith("PBC_")) {
 					experimentNames.add(experimentName);
 				} else {
 					continue;
@@ -133,8 +144,10 @@ public class IP2Util {
 							if (name2.equals("DTASelect-filter.txt")) {
 								// if the experiment already have a search, take
 								// the newest search
-								if (ret.containsKey(experimentName)) {
-									String searchPath1 = ret.get(experimentName);
+								if (ret.containsKey(experimentName) && keepOnlyLatest) {
+									// we take the first because if keepOnlyLatest is true, only the latest will be
+									// kept and only one element will be present
+									String searchPath1 = ret.get(experimentName).get(0);
 									searchPath1 = searchPath1.substring(0,
 											searchPath1.indexOf("/DTASelect-filter.txt"));
 									final int searchNumber1 = Integer
@@ -142,7 +155,8 @@ public class IP2Util {
 									final int searchNumber2 = Integer
 											.valueOf(searchPath.substring(searchPath.lastIndexOf("_") + 1));
 									if (searchNumber2 > searchNumber1) {
-										ret.put(experimentName, searchPath + "/DTASelect-filter.txt");
+										ret.get(experimentName).clear(); // remove the previous
+										ret.get(experimentName).add(searchPath + "/DTASelect-filter.txt");
 										log.info("Avoiding to override newer search in " + searchesPath + " where "
 												+ searchNumber2 + " is newer than " + searchNumber1);
 									} else {
@@ -150,7 +164,12 @@ public class IP2Util {
 												+ searchNumber1 + " is newer than " + searchNumber2);
 									}
 								} else {
-									ret.put(experimentName, searchPath + "/DTASelect-filter.txt");
+									if (!ret.containsKey(experimentName)) {
+										final List<String> list = new ArrayList<String>();
+										ret.put(experimentName, list);
+									}
+									ret.get(experimentName).add(searchPath + "/DTASelect-filter.txt");
+
 								}
 							}
 						}
@@ -173,7 +192,12 @@ public class IP2Util {
 
 	public static int getFractionNumberFromExperimentName(String experimentName, String experimentNamePattern) {
 		try {
-			if (experimentName.startsWith("HEK293_WCX_")) {
+			if (experimentName.startsWith("PBC_")) {
+				final String tmp = experimentName.substring(4);
+				final String tmp2 = tmp.substring(0, tmp.indexOf("_"));
+
+				return Integer.valueOf(tmp2);
+			} else if (experimentName.startsWith("HEK293_WCX_")) {
 				final String tmp = experimentName.substring(11);
 				String tmp2 = tmp.substring(0, tmp.indexOf("_"));
 				if (tmp2.contains("frac")) {
