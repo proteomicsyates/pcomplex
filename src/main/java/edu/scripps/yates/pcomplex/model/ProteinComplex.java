@@ -35,7 +35,7 @@ public class ProteinComplex {
 	public static String separator = "-";
 
 	private final Map<String, ProteinComponent> componentsByAccAndGene = new THashMap<String, ProteinComponent>();
-	private final String id;
+	private String id;
 	private String name;
 	private final List<ProteinComponent> componentList = new ArrayList<ProteinComponent>();
 	private final Set<ProteinComponent> componentSet = new THashSet<ProteinComponent>();
@@ -99,6 +99,10 @@ public class ProteinComplex {
 				}
 			}
 		}
+	}
+
+	public void setId(String id) {
+		this.id = id;
 	}
 
 	public void addComponent(ProteinComponent component) {
