@@ -57,6 +57,7 @@ import org.jfree.data.xy.XYSeriesCollection;
 
 import edu.scripps.yates.pcomplex.ProteinComplexAnalyzer;
 import edu.scripps.yates.pcomplex.db.ProteinComplexDB;
+import edu.scripps.yates.pcomplex.epic.EpicResultComparator;
 import edu.scripps.yates.pcomplex.model.Fraction;
 import edu.scripps.yates.pcomplex.model.Protein;
 import edu.scripps.yates.pcomplex.model.ProteinComplex;
@@ -493,12 +494,22 @@ public class ComplexesWindow extends JFrame {
 	}
 
 	protected void filterList(String text) throws IOException {
-		final ProteinComponent protein = new ProteinComponent(text, null);
 		final DefaultListModel<ProteinComplex> listModel = (DefaultListModel<ProteinComplex>) complexList.getModel();
-		listModel.clear();
-		for (int i = 0; i < defaultProteinComplexesModel.size(); i++) {
-			if (defaultProteinComplexesModel.get(i).getComponentSet().contains(protein)) {
+		try {
+			listModel.clear();
+		} catch (final Exception e) {
+		}
+		if ("".equals(text)) {
+			for (int i = 0; i < defaultProteinComplexesModel.size(); i++) {
 				listModel.addElement(defaultProteinComplexesModel.get(i));
+			}
+		} else {
+			final ProteinComponent protein = new ProteinComponent(text, null);
+			listModel.clear();
+			for (int i = 0; i < defaultProteinComplexesModel.size(); i++) {
+				if (defaultProteinComplexesModel.get(i).getComponentSet().contains(protein)) {
+					listModel.addElement(defaultProteinComplexesModel.get(i));
+				}
 			}
 		}
 		updateNumberOfClusters();
@@ -533,10 +544,17 @@ public class ComplexesWindow extends JFrame {
 	protected void submitProteinComplexes() {
 		try {
 			final JFileChooser fileChooser = new JFileChooser(currentDirectoryComplexes);
+			fileChooser.setFileSelectionMode(JFileChooser.FILES_AND_DIRECTORIES);
 			fileChooser.showOpenDialog(this);
 			final File selectedFile = fileChooser.getSelectedFile();
 			currentDirectoryComplexes = selectedFile.getParentFile();
-			final List<ProteinComplex> proteincomplexes = loadProteinComplexes(selectedFile);
+
+			List<ProteinComplex> proteincomplexes = null;
+			try {
+				proteincomplexes = loadProteinComplexes(selectedFile);
+			} catch (final IllegalArgumentException e) {
+				proteincomplexes = loadProteinComplexesFromEPICFolder(selectedFile);
+			}
 			loadProteinComplexesOnList(proteincomplexes);
 		} catch (final Exception e) {
 			showError(e);
@@ -586,6 +604,9 @@ public class ComplexesWindow extends JFrame {
 	}
 
 	private List<ProteinComplex> loadProteinComplexes(File selectedFile) throws IOException {
+		if (!selectedFile.isFile()) {
+			throw new IllegalArgumentException("This is not a file!");
+		}
 		final List<String> readAllLines = Files.readAllLines(selectedFile.toPath());
 		final List<ProteinComplex> ret = new ArrayList<ProteinComplex>();
 		final TObjectIntHashMap<String> indexByHeader = new TObjectIntHashMap<String>();
@@ -598,6 +619,9 @@ public class ComplexesWindow extends JFrame {
 					index++;
 				}
 				continue;
+			}
+			if (indexByHeader.isEmpty()) {
+				throw new IllegalArgumentException("This is not the proper format. Try with reading EPIC results");
 			}
 			final ProteinComplex complex = new ProteinComplex(null);
 			ret.add(complex);
@@ -706,6 +730,13 @@ public class ComplexesWindow extends JFrame {
 		}
 		log.info(numProteinsSimplified
 				+ " proteins in which we selected Swissprot ACC among all mapped ones from their gene name");
+
+		showError(ret.size() + " protein complexes loaded", "Protein complexes loaded");
+		return ret;
+	}
+
+	private List<ProteinComplex> loadProteinComplexesFromEPICFolder(File epicResultsFolder) throws IOException {
+		final List<ProteinComplex> ret = EpicResultComparator.readPredictedProteinComplexes(epicResultsFolder);
 
 		showError(ret.size() + " protein complexes loaded", "Protein complexes loaded");
 		return ret;
