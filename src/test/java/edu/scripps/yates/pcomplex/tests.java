@@ -2,11 +2,13 @@ package edu.scripps.yates.pcomplex;
 
 import static org.junit.Assert.assertEquals;
 
+import java.io.File;
 import java.io.IOException;
 
 import org.junit.Test;
 import org.springframework.core.io.ClassPathResource;
 
+import edu.scripps.yates.dtaselectparser.DTASelectParser;
 import edu.scripps.yates.pcomplex.model.ProteinComplex;
 import edu.scripps.yates.pcomplex.model.ProteinComponent;
 import junit.framework.Assert;
@@ -61,6 +63,20 @@ public class tests {
 			assertEquals(5, error);
 		} catch (final Exception ex) {
 			System.err.println(ex);
+		}
+	}
+
+	@Test
+	public void dtaselecttest() {
+		DTASelectParser parser;
+		try {
+			parser = new DTASelectParser(new File(
+					"C:\\Users\\salvador\\Desktop\\Anthony\\protein_complexes\\experiments\\Beta_cell_PCP\\106-PBC_106_S3_A9_1_3389_nopd_2020_10_28_08_255851-174397-DTASelect.txt"));
+			parser.getPSMsByFullSequence();
+			final String fastaPath = parser.getFastaPath();
+			System.out.println(fastaPath);
+		} catch (final IOException e) {
+			e.printStackTrace();
 		}
 	}
 }
