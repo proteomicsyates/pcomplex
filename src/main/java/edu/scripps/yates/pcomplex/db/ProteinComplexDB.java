@@ -3,6 +3,7 @@ package edu.scripps.yates.pcomplex.db;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -22,6 +23,7 @@ import edu.scripps.yates.pcomplex.util.ClusterEvaluation;
 import edu.scripps.yates.pcomplex.util.PComplexUtil;
 import edu.scripps.yates.utilities.annotations.uniprot.UniprotEntryUtil;
 import edu.scripps.yates.utilities.annotations.uniprot.xml.Entry;
+import edu.scripps.yates.utilities.fasta.FastaParser;
 import edu.scripps.yates.utilities.util.Pair;
 import gnu.trove.map.hash.THashMap;
 import gnu.trove.set.hash.THashSet;
@@ -486,5 +488,27 @@ public class ProteinComplexDB {
 
 	public ProteinComplex getProteinComplexesByID(String complexID) {
 		return proteinComplexesByID.get(complexID);
+	}
+
+	public void exportComplexes(File outputFile) throws IOException {
+		final FileWriter fw = new FileWriter(outputFile);
+		final Set<ProteinComplex> complexes = getProteinComplexes();
+		for (final ProteinComplex proteinComplex : complexes) {
+			String name = proteinComplex.getName();
+			if (name == null || "".equals(name)) {
+				name = proteinComplex.getId();
+			}
+			fw.write(name);
+			final List<ProteinComponent> componentList = proteinComplex.getComponentList();
+			for (final ProteinComponent protein : componentList) {
+				final String acc = protein.getAcc();
+				if (FastaParser.isUniProtACC(acc)) {
+					fw.write("\t" + acc);
+				}
+			}
+			fw.write("\n");
+		}
+		fw.close();
+		log.info("Complexes exported to file at: " + outputFile.getAbsolutePath());
 	}
 }
