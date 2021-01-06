@@ -4,6 +4,7 @@ import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -18,7 +19,7 @@ import edu.scripps.yates.pcomplex.model.Fraction;
 import edu.scripps.yates.pcomplex.model.ProteinComplex;
 import edu.scripps.yates.pcomplex.model.ProteinComponent;
 import edu.scripps.yates.pcomplex.model.SeparationExperiment;
-import edu.scripps.yates.utilities.files.FileUtils;
+import edu.scripps.yates.pcomplex.util.ClusterEvaluation;
 import edu.scripps.yates.utilities.maths.Maths;
 import edu.scripps.yates.utilities.venndata.VennData;
 import gnu.trove.list.TDoubleList;
@@ -35,8 +36,8 @@ public class FiguresGenerator {
 	public static void main(String[] args) {
 		final File epicFolder = new File(args[0]);
 		final String experimentFile = args[1];
-
-		final FiguresGenerator g = new FiguresGenerator(epicFolder, experimentFile);
+		final int numberOfUnitsThreshold = Integer.valueOf(args[2]);
+		final FiguresGenerator g = new FiguresGenerator(epicFolder, experimentFile, numberOfUnitsThreshold);
 		try {
 			g.run();
 			log.info("Everything OK");
@@ -53,6 +54,7 @@ public class FiguresGenerator {
 	private final File epicFolder;
 	private final String experimentName;
 	private final File projectSummaryFile;
+	private Integer sizeThresholdForFigSize = 8;
 
 	private void run() throws IOException {
 		final File excelFile = getExcelFile();
@@ -68,18 +70,23 @@ public class FiguresGenerator {
 ////				generateFig1B();
 		generateFig1C();
 		generateFig1D();
-		generateFigSize();
+		generateFigSize(sizeThresholdForFigSize);
 	}
 
-	private void generateFigSize() throws IOException {
+	private void generateFigSize(Integer sizeThreshold) throws IOException {
 
 		final TIntList sizes = new TIntArrayList();
-		final List<ProteinComplex> complexes = EpicResultComparator.readProteinComplexes(epicFolder);
+		final List<ProteinComplex> complexes = EpicResultComparator.readPredictedProteinComplexes(epicFolder);
 		for (final ProteinComplex proteinComplex : complexes) {
 			sizes.add(proteinComplex.getComponentList().size());
 		}
 		final double avgSize = Maths.mean(sizes);
-		final int smallCutOff = Double.valueOf(Math.floor(avgSize)).intValue();
+		int smallCutOff;
+		if (sizeThreshold != null) {
+			smallCutOff = sizeThreshold;
+		} else {
+			smallCutOff = Double.valueOf(Math.floor(avgSize)).intValue();
+		}
 		final List<ProteinComplex> small = complexes.stream().filter(c -> c.getComponentList().size() <= smallCutOff)
 				.collect(Collectors.toList());
 		final List<ProteinComplex> big = complexes.stream().filter(c -> c.getComponentList().size() > smallCutOff)
@@ -97,9 +104,10 @@ public class FiguresGenerator {
 		}
 		final VennData venn = new VennData("Num proteins in Big or Small complexes", "small", proteinsInSmall, "big",
 				proteinsInBig, null, null);
+		final File figFile = new File(epicFolder.getAbsolutePath() + File.separator + "figSize.txt");
 
-		final File figFile = File.createTempFile("figSize", ".tmp");
-		figFile.deleteOnExit();
+//		final File figFile = File.createTempFile("figSize", ".tmp");
+//		figFile.deleteOnExit();
 		final FileWriter fw = new FileWriter(figFile);
 		fw.write(complexes.size() + " total complexes\n");
 		fw.write("Avg size of complexes is " + avgSize + "\n");
@@ -108,7 +116,7 @@ public class FiguresGenerator {
 		fw.write(venn.toString());
 
 		fw.close();
-		FileUtils.separatedValuesToXLSX(figFile.getAbsolutePath(), getExcelFile().getAbsolutePath(), "\t", "FigSize");
+//		FileUtils.separatedValuesToXLSX(figFile.getAbsolutePath(), getExcelFile().getAbsolutePath(), "\t", "FigSize");
 
 		// now write files of big and small proteins
 		final String expName = FilenameUtils.getBaseName(getExcelFile().getParentFile().getAbsolutePath());
@@ -148,7 +156,7 @@ public class FiguresGenerator {
 	}
 
 	private void generateFig1D() throws IOException {
-		final List<ProteinComplex> complexes = EpicResultComparator.readProteinComplexes(epicFolder);
+		final List<ProteinComplex> complexes = EpicResultComparator.readPredictedProteinComplexes(epicFolder);
 
 		final List<ProteinComplex> known = complexes.stream().filter(c -> c.isKnown()).collect(Collectors.toList());
 		final List<ProteinComplex> unknown = complexes.stream().filter(c -> !c.isKnown()).collect(Collectors.toList());
@@ -214,7 +222,7 @@ public class FiguresGenerator {
 					double complexMW = 0.0;
 					for (final ProteinComponent component : complex.getComponentList()) {
 						final Double mw = fraction.getProteinByAcc(component.getAcc()).getMw();
-						if (mw != null) {
+						if (mw != null && !Double.isNaN(mw)) {
 							complexMW += mw;
 						} else {
 							log.info("Protein " + component.getAcc() + " has no mw");
@@ -232,19 +240,43 @@ public class FiguresGenerator {
 		}
 		sb.append("\n");
 
-		final File fig1DFile = File.createTempFile("fig1D", ".tmp");
-		fig1DFile.deleteOnExit();
+//		final File fig1DFile = File.createTempFile("fig1D", ".tmp");
+		final File fig1DFile = new File(epicFolder.getAbsolutePath() + File.separator + "fig1D.txt");
+//		fig1DFile.deleteOnExit();
 		final FileWriter fw = new FileWriter(fig1DFile);
 		fw.write(sb.toString() + "\n\n\n");
 
 		fw.close();
-		FileUtils.separatedValuesToXLSX(fig1DFile.getAbsolutePath(), getExcelFile().getAbsolutePath(), "\t", "Fig1D");
+//		FileUtils.separatedValuesToXLSX(fig1DFile.getAbsolutePath(), getExcelFile().getAbsolutePath(), "\t", "Fig1D");
 	}
 
 	private void generateFig1C() throws IOException {
-		final List<ProteinComplex> complexes = EpicResultComparator.readProteinComplexes(epicFolder);
-		final List<ProteinComplex> known = complexes.stream().filter(c -> c.isKnown()).collect(Collectors.toList());
-		final List<ProteinComplex> unknown = complexes.stream().filter(c -> !c.isKnown()).collect(Collectors.toList());
+		final List<ProteinComplex> predictedComplexes = EpicResultComparator.readPredictedProteinComplexes(epicFolder);
+//		final List<ProteinComplex> known = complexes.stream().filter(c -> c.isKnown()).collect(Collectors.toList());
+		// in this case we ant the actual known complexes, not the ones from unknowns
+		// that overlap with the known
+		final List<ProteinComplex> known = EpicResultComparator
+				.readComplexesFromRefComplexesFile(EpicResultComparator.getReferenceComplexFile(epicFolder));
+		// from these ones, we only keep the ones with a minimum overlap with any
+		// unknown
+		final Iterator<ProteinComplex> iterator = known.iterator();
+		while (iterator.hasNext()) {
+			final ProteinComplex knownComplex = iterator.next();
+			boolean valid = false;
+			for (final ProteinComplex predictedComplex : predictedComplexes) {
+				final double overlap = ClusterEvaluation.getOverlap(predictedComplex, knownComplex);
+				if (overlap > 0.25) {
+					valid = true;
+					break;
+				}
+			}
+			if (!valid) {
+				iterator.remove();
+			}
+		}
+
+		final List<ProteinComplex> unknown = predictedComplexes.stream().filter(c -> !c.isKnown())
+				.collect(Collectors.toList());
 		final StringBuilder sb = new StringBuilder();
 		sb.append("Number of known complexes\t" + known.size() + "\n");
 		sb.append("Number of new/unknown complexes\t" + unknown.size() + "\n");
@@ -256,36 +288,42 @@ public class FiguresGenerator {
 		final VennData venn = new VennData("QuickGO vs CORUM vs IntAct", "QuickGO", go, "CORUM", corum, "IntAct",
 				intAct);
 
-		final File fig1CFile = File.createTempFile("fig1C", ".tmp");
-		fig1CFile.deleteOnExit();
+		final File fig1CFile = new File(epicFolder.getAbsolutePath() + File.separator + "fig1C.txt");
+
+//		final File fig1CFile = File.createTempFile("fig1C", ".tmp");
+//		fig1CFile.deleteOnExit();
 		final FileWriter fw = new FileWriter(fig1CFile);
 		fw.write(sb.toString() + "\n\n\n");
 		fw.write(venn.toString());
 		fw.close();
-		FileUtils.separatedValuesToXLSX(fig1CFile.getAbsolutePath(), getExcelFile().getAbsolutePath(), "\t", "Fig1C");
+//		FileUtils.separatedValuesToXLSX(fig1CFile.getAbsolutePath(), getExcelFile().getAbsolutePath(), "\t", "Fig1C");
 	}
 
 	private void generateFig1A() throws IOException {
 		// from epic folder, take
 		final File epicTotalProteinsGOCCFile = getEpicTotalProteinsGOCCFile();
-		final GProfilerResult gProfilerResults = GProfiler.readGProfilerResults(epicTotalProteinsGOCCFile);
-		final Set<String> cytoplasm = gProfilerResults.getProteinsWithGOTerm(GO_CYTOPLASM);
-		final Set<String> organelle = gProfilerResults.getProteinsWithGOTerm(GO_ORGANELLE);
-		final VennData venn = new VennData("Cytoplasm vs Organelle", "Cytoplasm", cytoplasm, "Organelle", organelle,
-				null, null);
-		final File fig1File = File.createTempFile("fig1A", ".tmp");
-		fig1File.deleteOnExit();
-		final FileWriter fw = new FileWriter(fig1File);
-		fw.write(venn.toString());
-		fw.close();
-		FileUtils.separatedValuesToXLSX(fig1File.getAbsolutePath(), getExcelFile().getAbsolutePath(), "\t", "Fig1A");
+		if (epicTotalProteinsGOCCFile.exists()) {
+			final GProfilerResult gProfilerResults = GProfiler.readGProfilerResults(epicTotalProteinsGOCCFile);
+			final Set<String> cytoplasm = gProfilerResults.getProteinsWithGOTerm(GO_CYTOPLASM);
+			final Set<String> organelle = gProfilerResults.getProteinsWithGOTerm(GO_ORGANELLE);
+			final VennData venn = new VennData("Cytoplasm vs Organelle", "Cytoplasm", cytoplasm, "Organelle", organelle,
+					null, null);
+//			final File fig1File = File.createTempFile("fig1A", ".tmp");
+			final File fig1File = new File(epicFolder.getAbsolutePath() + File.separator + "fi1A.txt");
 
+//			fig1File.deleteOnExit();
+			final FileWriter fw = new FileWriter(fig1File);
+			fw.write(venn.toString());
+			fw.close();
+//			FileUtils.separatedValuesToXLSX(fig1File.getAbsolutePath(), getExcelFile().getAbsolutePath(), "\t",
+//					"Fig1A");
+		}
 	}
 
 	private void generateFig1B() throws IOException {
 		// from epic folder, take
 
-		final List<ProteinComplex> complexes = EpicResultComparator.readProteinComplexes(epicFolder);
+		final List<ProteinComplex> complexes = EpicResultComparator.readPredictedProteinComplexes(epicFolder);
 		final List<ProteinComplex> known = complexes.stream().filter(c -> c.isKnown()).collect(Collectors.toList());
 		final List<ProteinComplex> unknown = complexes.stream().filter(c -> !c.isKnown()).collect(Collectors.toList());
 
@@ -302,14 +340,16 @@ public class FiguresGenerator {
 				organelle);
 		final VennData vennUnknown = getComplexesVennData("Cytoplasm vs Organelle (unkown complexes)", unknown,
 				cytoplasm, organelle);
-		final File fig1File = File.createTempFile("fig1B", ".tmp");
-		fig1File.deleteOnExit();
+//		final File fig1File = File.createTempFile("fig1B", ".tmp");
+		final File fig1File = new File(epicFolder.getAbsolutePath() + File.separator + "fig1B.txt");
+
+//		fig1File.deleteOnExit();
 		final FileWriter fw = new FileWriter(fig1File);
 		fw.write(vennAll.toString() + "\n\n\n");
 		fw.write(vennKnown.toString() + "\n\n\n");
 		fw.write(vennUnknown.toString());
 		fw.close();
-		FileUtils.separatedValuesToXLSX(fig1File.getAbsolutePath(), getExcelFile().getAbsolutePath(), "\t", "Fig1B");
+//		FileUtils.separatedValuesToXLSX(fig1File.getAbsolutePath(), getExcelFile().getAbsolutePath(), "\t", "Fig1B");
 
 	}
 
@@ -362,10 +402,11 @@ public class FiguresGenerator {
 		return FilenameUtils.getBaseName(this.epicFolder.getAbsolutePath());
 	}
 
-	public FiguresGenerator(File epicFolder, String experimentFile) {
+	public FiguresGenerator(File epicFolder, String experimentFile, int sizeThresholdForFigSize) {
 		this.projectSummaryFile = new File(experimentFile);
 		this.experimentName = FilenameUtils.getBaseName(projectSummaryFile.getAbsolutePath());
 		this.epicFolder = epicFolder;
+		this.sizeThresholdForFigSize = sizeThresholdForFigSize;
 	}
 
 	public SeparationExperiment getSeparationExperiment() throws IOException {
