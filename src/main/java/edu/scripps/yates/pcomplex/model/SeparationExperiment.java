@@ -278,37 +278,52 @@ public class SeparationExperiment {
 		}
 		fw.write("\n");
 		int numProteinDiscarded = 0;
-		for (final String acc : accs) {
-			boolean proteinInfoWritten = false;
-			final StringBuilder sb = new StringBuilder();
-			int maxNumNonZeroConsecutiveFractions = 0;
-			int nonZeroFraction = 0;
-			for (final Fraction fraction : fractionsSorted) {
-				final Protein protein = fraction.getProteinByAcc(acc);
-				if (!proteinInfoWritten && protein != null) {
-					if (includeReplicateColumn) {
-						sb.insert(0, protein.getAcc() + separator + "1" + separator);
-					} else {
-						sb.insert(0, protein.getAcc() + separator);
-					}
-					proteinInfoWritten = true;
+		for (final String rawAcc : accs) {
+			// separate groups into different rows so it is better for epic and prince
+			final List<String> individualAccs = new ArrayList<String>();
+			if (rawAcc.contains("#")) {
+				final String[] split = rawAcc.split("#");
+				for (final String acc : split) {
+					individualAccs.add(acc);
 				}
-				if (protein != null) {
-					sb.append(getData(protein, dataType, multiplicativeFactor));
-					nonZeroFraction++;
-					if (nonZeroFraction > maxNumNonZeroConsecutiveFractions) {
-						maxNumNonZeroConsecutiveFractions = nonZeroFraction;
-					}
-				} else {
-					sb.append("NaN");
-					nonZeroFraction = 0;
-				}
-				sb.append(separator);
-			}
-			if (maxNumNonZeroConsecutiveFractions >= MIN_CONSECUTIVE_NON_ZERO_FRACTIONS) {
-				fw.write(sb.toString() + "\n");
 			} else {
-				numProteinDiscarded++;
+				individualAccs.add(rawAcc);
+			}
+			for (int i = 0; i < individualAccs.size(); i++) {
+				final String individualAcc = individualAccs.get(i);
+				boolean proteinInfoWritten = false;
+				final StringBuilder sb = new StringBuilder();
+				int maxNumNonZeroConsecutiveFractions = 0;
+				int nonZeroFraction = 0;
+				for (final Fraction fraction : fractionsSorted) {
+					final Protein protein = fraction.getProteinByAcc(rawAcc);
+					if (!proteinInfoWritten && protein != null) {
+						if (includeReplicateColumn) {
+							sb.insert(0, individualAcc + separator + "1" + separator);
+						} else {
+							sb.insert(0, individualAcc + separator);
+						}
+						proteinInfoWritten = true;
+					}
+					if (protein != null) {
+						sb.append(getData(protein, dataType, multiplicativeFactor));
+						nonZeroFraction++;
+						if (nonZeroFraction > maxNumNonZeroConsecutiveFractions) {
+							maxNumNonZeroConsecutiveFractions = nonZeroFraction;
+						}
+					} else {
+						sb.append("NaN");
+						nonZeroFraction = 0;
+					}
+					sb.append(separator);
+				}
+				if (maxNumNonZeroConsecutiveFractions >= MIN_CONSECUTIVE_NON_ZERO_FRACTIONS) {
+					fw.write(sb.toString() + "\n");
+				} else {
+					if (i == 0) { // only count once per group
+						numProteinDiscarded++;
+					}
+				}
 			}
 		}
 		fw.close();
