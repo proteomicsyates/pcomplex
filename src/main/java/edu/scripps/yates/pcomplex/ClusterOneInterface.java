@@ -32,7 +32,63 @@ public class ClusterOneInterface {
 		algorithmParameters.setNodePenalty(penalty);
 
 		final ClusterONE clusterOne = new ClusterONE(algorithmParameters);
-		clusterOne.setGraph(createGraph(classificationResult, pValueCutoff, classLabel));
+		final List<ProteinPairInteraction> interactions = classificationResult.getInteractions(pValueCutoff,
+				classLabel);
+		clusterOne.setGraph(createGraph(interactions));
+		clusterOne.setTaskMonitor(new TaskMonitor() {
+
+			@Override
+			public void setStatus(String message) {
+				log.info("ClusterONE status: " + message);
+			}
+
+			@Override
+			public void setPercentCompleted(int percent) throws IllegalArgumentException {
+				log.info("ClusterONE progress: " + percent);
+
+			}
+
+			@Override
+			public void setException(Throwable t, String userErrorMessage, String recoveryTip) {
+				log.error(userErrorMessage, t);
+				log.error("ClusterONE tip: " + recoveryTip);
+			}
+
+			@Override
+			public void setException(Throwable t, String userErrorMessage) {
+				log.error(userErrorMessage, t);
+			}
+
+			@Override
+			public void setEstimatedTimeRemaining(long time) {
+				log.info("ClusterONE ETA: " + DatesUtil.getDescriptiveTimeFromMillisecs(time));
+			}
+		});
+		try {
+			clusterOne.run();
+			final List<ValuedNodeSet> results = clusterOne.getResults();
+
+			return trasnformResultsToProteinComplexes(results);
+		} catch (final ClusterONEException e) {
+
+			e.printStackTrace();
+			log.error(e);
+			return null;
+		} catch (final IOException e) {
+			e.printStackTrace();
+			log.error(e);
+			return null;
+		}
+	}
+
+	public List<ProteinComplex> runClusterOne(List<ProteinPairInteraction> interactions, double minDensity,
+			double penalty) {
+		final ClusterONEAlgorithmParameters algorithmParameters = new ClusterONEAlgorithmParameters();
+		algorithmParameters.setMinDensity(minDensity);
+		algorithmParameters.setNodePenalty(penalty);
+
+		final ClusterONE clusterOne = new ClusterONE(algorithmParameters);
+		clusterOne.setGraph(createGraph(interactions));
 		clusterOne.setTaskMonitor(new TaskMonitor() {
 
 			@Override
@@ -103,19 +159,14 @@ public class ClusterOneInterface {
 	/**
 	 * Creates the {@link Graph}
 	 * 
-	 * @param result
-	 * @param pValueCutoff
+	 * @param interactions
 	 * @return
 	 */
-	private Graph createGraph(ClassificationResult result, double pValueCutoff, ClassLabel classLabel) {
+	private Graph createGraph(List<ProteinPairInteraction> interactions) {
 		final Graph ret = new Graph();
-		final List<ProteinPairInteraction> interactionsByPValue = result.getInteractions(pValueCutoff, classLabel);
 		int edges = 0;
-		for (final ProteinPairInteraction interaction : interactionsByPValue) {
-			if (interaction.getProbability(ClassLabel.INTRA_COMPLEX) < pValueCutoff) {
-				throw new IllegalArgumentException(
-						"This shoudn't happen because it should be already filtered by getInteractionsByPValue()");
-			}
+		for (final ProteinPairInteraction interaction : interactions) {
+
 			final String protein1 = interaction.getProtein1Acc();
 			final String protein2 = interaction.getProtein2Acc();
 			int indexNode1 = -1;
@@ -143,7 +194,7 @@ public class ClusterOneInterface {
 		log.info("Graph created with " + edges + " edges");
 		if (edges == 0) {
 			throw new IllegalArgumentException(
-					"There is no edges in this graph formed with " + interactionsByPValue.size() + " interactions");
+					"There is no edges in this graph formed with " + interactions.size() + " interactions");
 		}
 		return ret;
 	}
