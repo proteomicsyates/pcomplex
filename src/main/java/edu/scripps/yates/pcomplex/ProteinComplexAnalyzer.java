@@ -102,11 +102,11 @@ public class ProteinComplexAnalyzer {
 	public static String ORGANISM = "Human";
 	private static boolean runOverlapping = false;
 
-	public static String basePath = "Z:\\share\\Salva\\data\\asaviola\\protein complexes";
-//	public static String basePath = "C:\\Users\\salvador\\Desktop\\Anthony\\protein_complexes";
+//	public static String basePath = "Z:\\share\\Salva\\data\\asaviola\\protein complexes";
+	public static String basePath = "C:\\Users\\salvador\\Desktop\\Anthony\\protein_complexes";
 	public static String downloadFilesPath = basePath + "\\experiments";
-	public static String uniprotReleasesFolder = "Z:\\share\\Salva\\data\\uniprotKB";
-//	public static String uniprotReleasesFolder = "C:\\Users\\salvador\\Desktop\\uniprotKB";
+//	public static String uniprotReleasesFolder = "Z:\\share\\Salva\\data\\uniprotKB";
+	public static String uniprotReleasesFolder = "C:\\Users\\salvador\\Desktop\\uniprotKB";
 
 	private static int defaultMinNumComponentsInComplex = 2;
 	private final static DateFormat datef = new SimpleDateFormat("MM-dd-yyyy HH_mm_ss");

@@ -3,6 +3,7 @@ package edu.scripps.yates.pcomplex.model;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
@@ -543,16 +544,37 @@ public class ProteinComplex {
 	 */
 	public double getMaxOverlap(ProteinComplexDB db) {
 		if (!maxOverlapsPerDB.containsKey(db.getName())) {
-			double max = -Double.MAX_VALUE;
-			for (final ProteinComplex complex : db.getProteinComplexes()) {
-				final double overlap = ClusterEvaluation.getOverlap(complex, this);
-				if (overlap > max) {
-					max = overlap;
-				}
-			}
+			final double max = getMaxOverlap(db.getProteinComplexes());
 			maxOverlapsPerDB.put(db.getName(), max);
 		}
 		return maxOverlapsPerDB.get(db.getName());
+	}
+
+	/**
+	 * Gets the max overlap between this complex and a collection of complexes
+	 * 
+	 * @param complex2
+	 * @return
+	 */
+	public double getMaxOverlap(Collection<ProteinComplex> complexes) {
+		double max = -Double.MAX_VALUE;
+		for (final ProteinComplex complex2 : complexes) {
+			final double overlap = ClusterEvaluation.getOverlap(complex2, this);
+			if (overlap > max) {
+				max = overlap;
+			}
+		}
+		return max;
+	}
+
+	/**
+	 * Gets the overlap between this complex and complex2
+	 * 
+	 * @param complex2
+	 * @return
+	 */
+	public double getOverlap(ProteinComplex complex2) {
+		return ClusterEvaluation.getOverlap(this, complex2);
 	}
 
 	public boolean isRemoved() {

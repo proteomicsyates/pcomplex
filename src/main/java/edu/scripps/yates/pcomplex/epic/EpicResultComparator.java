@@ -14,6 +14,7 @@ import java.util.stream.Collectors;
 import org.apache.commons.io.FilenameUtils;
 import org.apache.log4j.Logger;
 
+import edu.scripps.yates.pcomplex.AbstractEpicOrPrinceResultsComparator;
 import edu.scripps.yates.pcomplex.ProteinComplexAnalyzer;
 import edu.scripps.yates.pcomplex.db.ProteinComplexDB;
 import edu.scripps.yates.pcomplex.model.ProteinComplex;
@@ -23,12 +24,10 @@ import edu.scripps.yates.pcomplex.util.ClusterEvaluation;
 import edu.scripps.yates.utilities.venndata.VennData;
 import gnu.trove.set.hash.THashSet;
 
-public class EpicResultComparator {
+public class EpicResultComparator extends AbstractEpicOrPrinceResultsComparator {
 	private final static Logger log = Logger.getLogger(EpicResultComparator.class);
 	protected static final String _out_suffix = "_out";
-	private final File epicResultsFolder;
 	private static int complexID = 0;
-	private final double minOverlapScore;
 	private static List<ProteinComplexDB> dBs;
 
 	public static void main(String[] args) {
@@ -67,8 +66,7 @@ public class EpicResultComparator {
 	 * @param minOverlapScore
 	 */
 	public EpicResultComparator(File epicResultsFolder, double minOverlapScore) {
-		this.epicResultsFolder = epicResultsFolder;
-		this.minOverlapScore = minOverlapScore;
+		super(minOverlapScore, epicResultsFolder);
 		if (epicResultsFolder.isFile()) {
 			throw new IllegalArgumentException(epicResultsFolder.getAbsolutePath() + " is a file, not a folder");
 		}
@@ -82,12 +80,12 @@ public class EpicResultComparator {
 	 * @throws IOException
 	 */
 	public File compareWithOtherEPICResult(File epicResultsFolder2) throws IOException {
-
-		final String experimentName1 = getExperimentName(epicResultsFolder);
+		final File epicResultsFolder = super.fileOrFolder;
+		final String experimentName1 = getExperimentName();
 		final List<ProteinComplex> complexes1 = readPredictedProteinComplexes(epicResultsFolder);
 		Set<Object> set1 = complexes1.stream().map(c -> c.getId()).collect(Collectors.toSet());
 
-		final String experimentName2 = getExperimentName(epicResultsFolder2);
+		final String experimentName2 = getExperimentNameFromEpicFolder(epicResultsFolder2);
 		final List<ProteinComplex> complexes2 = readPredictedProteinComplexes(epicResultsFolder2);
 		Set<Object> set2 = complexes2.stream().map(c -> c.getId()).collect(Collectors.toSet());
 
@@ -206,8 +204,9 @@ public class EpicResultComparator {
 	 * 
 	 * @throws IOException
 	 */
+	@Override
 	public File compareWithDBs(List<ProteinComplexDB> dBs) throws IOException {
-
+		final File epicResultsFolder = super.fileOrFolder;
 		if (epicResultsFolder.isFile()) {
 			throw new IllegalArgumentException(epicResultsFolder.getAbsolutePath() + " is a file, not a folder");
 		}
@@ -217,36 +216,16 @@ public class EpicResultComparator {
 		final File[] folders = getfilesEndingWith(epicResultsFolder, _out_suffix);
 		writeSummaryHeaderLine(fw, dBs);
 		for (final File folder : folders) {
-			final String experimentName = getExperimentName(folder);
 			final File complexesFile = getPredictedComplexesFile(folder);
 			final List<ProteinComplex> complexes = readComplexes(complexesFile);
 
 			final EpicSummary epicSummary = new EpicSummary(getSummaryFile(folder));
-			writeSummaryLine(fw, experimentName, complexes, epicSummary, dBs);
+			final String comparisonDescription = getComparisonDescription(complexes, epicSummary.getString(), dBs);
+			fw.write(comparisonDescription);
 		}
 		fw.close();
 		log.info("File written at: " + outputFile.getAbsolutePath());
 		return outputFile;
-
-	}
-
-	private void writeSummaryLine(FileWriter fw, String experimentName, List<ProteinComplex> complexes,
-			EpicSummary epicSummary, List<ProteinComplexDB> dBs) throws IOException {
-		fw.write(experimentName + "\t");
-		fw.write(complexes.size() + "\t");
-		for (final ProteinComplexDB db : dBs) {
-			int overlapping = 0;
-			for (final ProteinComplex complex : complexes) {
-				final double maxOverlap = complex.getMaxOverlap(db);
-				if (maxOverlap > minOverlapScore) {
-					overlapping++;
-				}
-			}
-			fw.write(overlapping + "\t");
-			fw.write((complexes.size() - overlapping) + "\t");
-		}
-		fw.write(epicSummary.getString());
-		fw.write("\n");
 
 	}
 
@@ -261,15 +240,21 @@ public class EpicResultComparator {
 		fw.write("\n");
 	}
 
-	private String getExperimentName(File folder) {
-		String name = FilenameUtils.getBaseName(folder.getAbsolutePath());
+	@Override
+	public String getExperimentName() {
+		return getExperimentNameFromEpicFolder(fileOrFolder);
+	}
+
+	private String getExperimentNameFromEpicFolder(File epicFolder) {
+		String name = FilenameUtils.getBaseName(epicFolder.getAbsolutePath());
 		if (name.endsWith(_out_suffix)) {
 			name = name.substring(0, name.indexOf(_out_suffix));
 		}
 		return name;
 	}
 
-	public static List<ProteinComplex> readComplexes(File complexesFile) throws IOException {
+	@Override
+	public List<ProteinComplex> readComplexes(File complexesFile) throws IOException {
 		final List<ProteinComplex> ret = new ArrayList<ProteinComplex>();
 		final List<String> lines = Files.readAllLines(complexesFile.toPath());
 		for (final String line : lines) {
@@ -382,7 +367,7 @@ public class EpicResultComparator {
 		return files;
 	}
 
-	public static File getSummaryFile(File folder) {
+	private static File getSummaryFile(File folder) {
 		final File[] files = getfilesEndingWith(folder, "Summary.txt");
 		if (files.length > 0) {
 			return files[0];
@@ -390,7 +375,7 @@ public class EpicResultComparator {
 		return files[0];
 	}
 
-	public static File getPredictedComplexesFile(File folder) {
+	private static File getPredictedComplexesFile(File folder) {
 		final File[] files = getfilesEndingWith(folder, "clust.txt");
 		if (files.length > 0) {
 			return files[0];
@@ -408,7 +393,7 @@ public class EpicResultComparator {
 	 * @return
 	 * @throws IOException
 	 */
-	public static List<ProteinComplex> readComplexesFromClustFile(File clustFile) throws IOException {
+	private static List<ProteinComplex> readComplexesFromClustFile(File clustFile) throws IOException {
 		final List<ProteinComplex> ret = new ArrayList<ProteinComplex>();
 		final List<String> lines = Files.readAllLines(clustFile.toPath());
 		int num = 1;

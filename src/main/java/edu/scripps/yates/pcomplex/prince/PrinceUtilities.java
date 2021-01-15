@@ -13,6 +13,7 @@ import edu.scripps.yates.pcomplex.ClusterOneInterface;
 import edu.scripps.yates.pcomplex.cofractionation.ClassLabel;
 import edu.scripps.yates.pcomplex.cofractionation.training.ProteinPairInteraction;
 import edu.scripps.yates.pcomplex.model.ProteinComplex;
+import edu.scripps.yates.pcomplex.model.ProteinComponent;
 
 public class PrinceUtilities {
 	private final File interactionsFile = new File(
@@ -68,11 +69,44 @@ public class PrinceUtilities {
 	}
 
 	/**
+	 * Reads cluster one result file which has a line per complex with this
+	 * format:<br>
+	 * 273100247 : ["P01308"-"P30410"-"Q6YK33"-"Q8HXV2"]
 	 * 
 	 * @param clusterOneFile
 	 * @return
+	 * @throws IOException
 	 */
-	public static List<ProteinComplex> readClusterOneResults(File clusterOneFile) {
-// TODO
+	public static List<ProteinComplex> readClusterOneResults(File clusterOneFile) throws IOException {
+		final List<ProteinComplex> ret = new ArrayList<ProteinComplex>();
+		final List<String> lines = Files.readAllLines(clusterOneFile.toPath());
+		for (final String line : lines) {
+			final String[] split = line.split(":");
+			final String complexID = split[0].trim();
+			final ProteinComplex complex = new ProteinComplex(complexID);
+			String componentsRaw = split[1].trim();
+			// remove brackets
+			if (componentsRaw.startsWith("[")) {
+				componentsRaw = componentsRaw.substring(0);
+			}
+			if (componentsRaw.startsWith("]")) {
+				componentsRaw = componentsRaw.substring(0, componentsRaw.length() - 1);
+			}
+			// split by '-'
+			final String[] split2 = componentsRaw.split("-");
+			for (String element : split2) {
+				// remove "
+				if (element.startsWith("\"")) {
+					element = element.substring(0);
+				}
+				if (element.startsWith("\"")) {
+					element = element.substring(0, element.length() - 1);
+				}
+				final ProteinComponent component = new ProteinComponent(element, element);
+				complex.addComponent(component);
+			}
+			ret.add(complex);
+		}
+		return ret;
 	}
 }
