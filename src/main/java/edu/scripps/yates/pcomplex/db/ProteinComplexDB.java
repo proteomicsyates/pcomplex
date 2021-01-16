@@ -127,7 +127,10 @@ public class ProteinComplexDB {
 		// get all annotations and set protein names
 		final Set<String> accs = new THashSet<String>();
 		for (final ProteinComplex proteinComplex : proteinComplexes) {
-			proteinComplexesByID.put(proteinComplex.getId(), proteinComplex);
+			final ProteinComplex previousvalue = proteinComplexesByID.put(proteinComplex.getId(), proteinComplex);
+			if (previousvalue != null) {
+				System.out.println("asdf");
+			}
 			for (final ProteinComponent prot : proteinComplex.getComponentList()) {
 				if (prot.getAcc() != null) {
 					accs.add(prot.getAcc());

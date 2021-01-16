@@ -56,6 +56,7 @@ public class ProteinComplex {
 	private String goID;
 	private String corumID;
 	private String intActID;
+	private boolean useIdInEqualsMethod;
 
 	public ProteinComplex(String id) {
 		this.id = id;
@@ -340,7 +341,9 @@ public class ProteinComplex {
 	public boolean equals(Object obj) {
 		if (obj instanceof ProteinComplex) {
 			final ProteinComplex complex = (ProteinComplex) obj;
-
+			if (useIdInEqualsMethod) {
+				return complex.getId().equals(getId()) && complex.getComponentsKey().equals(getComponentsKey());
+			}
 			return complex.getComponentsKey().equals(getComponentsKey());
 		}
 		return super.equals(obj);
@@ -510,7 +513,11 @@ public class ProteinComplex {
 	@Override
 	public int hashCode() {
 		if (hashcode == -1) {
-			hashcode = HashCodeBuilder.reflectionHashCode(getComponentsKey());
+			String key = getComponentsKey();
+			if (useIdInEqualsMethod) {
+				key += getId();
+			}
+			hashcode = HashCodeBuilder.reflectionHashCode(key);
 		}
 		return hashcode;
 	}
@@ -621,5 +628,9 @@ public class ProteinComplex {
 
 	public boolean isSourceIntAct() {
 		return intActID != null;
+	}
+
+	public void setUseIdInEqualsMethod(boolean b) {
+		useIdInEqualsMethod = b;
 	}
 }
