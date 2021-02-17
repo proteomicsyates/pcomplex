@@ -16,8 +16,17 @@ import edu.scripps.yates.pcomplex.model.ProteinComplex;
 import edu.scripps.yates.pcomplex.model.ProteinComponent;
 
 public class PrinceUtilities {
-	private final File interactionsFile = new File(
-			"D:\\Dropbox (Scripps Research)\\beta_cells_PCP\\prince\\Beta_cell_PCP_NSAF_Human_interactions_all.csv");
+	private final static File interactionsFile = new File(
+			"D:\\Dropbox (Scripps Research)\\beta_cells_PCP\\prince\\Beta_cell_PCP_NSAF_Human_1_2_filtered_interactions_score_gt_0.85.csv");
+
+	public static void main(String[] args) {
+		try {
+			createClusters(interactionsFile);
+			System.out.println("Everything ok");
+		} catch (final IOException e) {
+			e.printStackTrace();
+		}
+	}
 
 	/**
 	 * Reads the interactions created by PrinCE and apply the ClusterONE algorithm
@@ -35,7 +44,7 @@ public class PrinceUtilities {
 		for (int i = 1; i < lines.size(); i++) {
 			final String line = lines.get(i);
 			final String[] split = line.split(",");
-			int index = 1;
+			int index = 0;
 			if (split.length == 7) {
 				index = 2;
 			}
