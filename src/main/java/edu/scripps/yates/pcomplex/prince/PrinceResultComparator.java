@@ -27,7 +27,8 @@ import gnu.trove.set.hash.THashSet;
 
 public class PrinceResultComparator extends AbstractEpicOrPrinceResultsComparator {
 	private final static Logger log = Logger.getLogger(PrinceResultComparator.class);
-	public static final String clusterOne_results_file_suffix = "_interactions_all_clusterOne";
+	public static final String prince_clusterOne_results_file_suffix = "_clusterOne";
+	public static final String prince_interactions_results_file_suffix = "_interactions_all";
 	private static List<ProteinComplexDB> dBs;
 
 	public static void main(String[] args) {
@@ -229,8 +230,8 @@ public class PrinceResultComparator extends AbstractEpicOrPrinceResultsComparato
 
 	public String getExperimentNameFromPrinceClusterOneResultsFile(File clusterOneFileResults) {
 		String name = FilenameUtils.getBaseName(clusterOneFileResults.getAbsolutePath());
-		if (name.endsWith(clusterOne_results_file_suffix)) {
-			name = name.substring(0, name.indexOf(clusterOne_results_file_suffix));
+		if (name.endsWith(prince_clusterOne_results_file_suffix)) {
+			name = name.substring(0, name.indexOf(prince_clusterOne_results_file_suffix));
 		}
 		return name;
 	}

@@ -48,6 +48,9 @@ public class SeparationExperiment {
 
 	public void addProtein(String fractionName, int fractionNumber, Protein protein) {
 		final String acc = protein.getAcc();
+		if (acc.contains("A0A0B4J2D5") || acc.contains("P0DPI2")) {
+			log.info("asdf");
+		}
 		if (!proteinACCList.contains(acc)) {
 			proteinACCList.add(acc);
 		}
@@ -279,6 +282,9 @@ public class SeparationExperiment {
 		fw.write("\n");
 		int numProteinDiscarded = 0;
 		for (final String rawAcc : accs) {
+			if (rawAcc.contains("A0A0B4J2D5") || rawAcc.contains("P0DPI2")) {
+				log.info("asdf");
+			}
 			// separate groups into different rows so it is better for epic and prince
 			final List<String> individualAccs = new ArrayList<String>();
 			if (rawAcc.contains("#")) {

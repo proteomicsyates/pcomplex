@@ -7,13 +7,13 @@ import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.List;
 
-import org.apache.commons.io.FilenameUtils;
-
 import edu.scripps.yates.pcomplex.ClusterOneInterface;
 import edu.scripps.yates.pcomplex.cofractionation.ClassLabel;
 import edu.scripps.yates.pcomplex.cofractionation.training.ProteinPairInteraction;
 import edu.scripps.yates.pcomplex.model.ProteinComplex;
 import edu.scripps.yates.pcomplex.model.ProteinComponent;
+import gnu.trove.map.TObjectIntMap;
+import gnu.trove.map.hash.TObjectIntHashMap;
 
 public class PrinceUtilities {
 	private final File interactionsFile = new File(
@@ -27,25 +27,75 @@ public class PrinceUtilities {
 	 * @throws IOException
 	 */
 
-	public static File createClusters(File interactionsFile) throws IOException {
+	public static List<ProteinComplex> createClusters(File interactionsFile, Double precisionCutOff, Double scoreCutOff,
+			File clusterOneResultsFile) throws IOException {
+		if (precisionCutOff != null && scoreCutOff != null) {
+			throw new IllegalArgumentException("Either precision or score cut offs should be provided");
+		}
 
-		final ClusterOneInterface clusterOne = new ClusterOneInterface();
 		final List<ProteinPairInteraction> interactions = new ArrayList<ProteinPairInteraction>();
 		final List<String> lines = Files.readAllLines(interactionsFile.toPath());
+		final TObjectIntMap<String> indexesByColumnNames = new TObjectIntHashMap<String>();
+		final String headers = lines.get(0).replace("\"", "");
+		final String[] splitHeader = headers.split(",");
+		for (int index = 0; index < splitHeader.length; index++) {
+			final String header = splitHeader[index];
+			indexesByColumnNames.put(header, index);
+		}
+		// depending on whether Prince was run with ensemble classifier or not, we will
+		// have mean or score as the column with the score. the score is the higher the
+		// better.
+		int scoreIndex;
+		if (indexesByColumnNames.containsKey("score")) {
+			scoreIndex = indexesByColumnNames.get("score");
+		} else {
+			scoreIndex = indexesByColumnNames.get("mean");
+		}
+		// first we figure out in which line we want to set the threshold depending on
+		// whether is a threshold over the score or over the precision
+		//
+		int maxLine = 1;
 		for (int i = 1; i < lines.size(); i++) {
 			final String line = lines.get(i);
 			final String[] split = line.split(",");
-			int index = 1;
-			if (split.length == 7) {
-				index = 2;
+			if (precisionCutOff != null) {
+				// it would be in the maximum file line in which the precision is above the
+				// threshold
+				// lines before could have a lower precision, or even no precision at all, but
+				// the interaction score will be higher and so we will keep them
+				if (split.length < indexesByColumnNames.get("precision")) {
+					continue;
+				}
+				final String precisionString = split[indexesByColumnNames.get("precision")];
+				final Double precision = Double.valueOf(precisionString);
+				if (precision >= precisionCutOff) {
+					maxLine = i;
+				}
+			} else if (scoreCutOff != null) {
+				final String scoreString = split[scoreIndex];
+				final double score = Double.valueOf(scoreString);
+				if (score >= scoreCutOff) {
+					maxLine = i;
+				}
+			} else {
+				throw new IllegalArgumentException("Either precision or score should be provided");
 			}
-			final String proteinA = split[index];
-			final String proteinB = split[index + 1];
+		}
+		System.out.println(
+				"we will keep " + (maxLine - 1) + " interactions at that precision threshold " + precisionCutOff);
 
-			final double[] probabilities = new double[1];
+		for (int i = 1; i <= maxLine; i++) {
+			final String line = lines.get(i);
+			final String[] split = line.split(",");
+
+			final String proteinA = split[indexesByColumnNames.get("protein_A")];
+			final String proteinB = split[indexesByColumnNames.get("protein_B")];
+
+			final double[] scores = new double[1];
 			try {
-				probabilities[0] = Double.valueOf(split[index + 2]);
-				final ProteinPairInteraction ppi = new ProteinPairInteraction(proteinA, proteinB, probabilities,
+
+				scores[0] = Double.valueOf(split[scoreIndex]);
+				final ProteinPairInteraction ppi = new ProteinPairInteraction(proteinA, proteinB, scores,
 						ClassLabel.INTRA_COMPLEX);
 				interactions.add(ppi);
 			} catch (final Exception e) {
@@ -53,19 +103,18 @@ public class PrinceUtilities {
 			}
 		}
 
+		final ClusterOneInterface clusterOne = new ClusterOneInterface();
 		final double clusterOneMinDensity = 0.4;
 		final double clusterOnePenalty = 2.9;
 		final List<ProteinComplex> result = clusterOne.runClusterOne(interactions, clusterOneMinDensity,
 				clusterOnePenalty);
 
-		final File clustersFile = new File(interactionsFile.getParent() + File.separator
-				+ FilenameUtils.getBaseName(interactionsFile.getAbsolutePath()) + "_clusterOne.txt");
-		final FileWriter fw = new FileWriter(clustersFile);
+		final FileWriter fw = new FileWriter(clusterOneResultsFile);
 		for (final ProteinComplex proteinComplex : result) {
 			fw.write(proteinComplex.toString() + "\n");
 		}
 		fw.close();
-		return clustersFile;
+		return result;
 	}
 
 	/**
@@ -87,9 +136,9 @@ public class PrinceUtilities {
 			String componentsRaw = split[1].trim();
 			// remove brackets
 			if (componentsRaw.startsWith("[")) {
-				componentsRaw = componentsRaw.substring(0);
+				componentsRaw = componentsRaw.substring(1);
 			}
-			if (componentsRaw.startsWith("]")) {
+			if (componentsRaw.endsWith("]")) {
 				componentsRaw = componentsRaw.substring(0, componentsRaw.length() - 1);
 			}
 			// split by '-'
@@ -97,9 +146,9 @@ public class PrinceUtilities {
 			for (String element : split2) {
 				// remove "
 				if (element.startsWith("\"")) {
-					element = element.substring(0);
+					element = element.substring(1);
 				}
-				if (element.startsWith("\"")) {
+				if (element.endsWith("\"")) {
 					element = element.substring(0, element.length() - 1);
 				}
 				final ProteinComponent component = new ProteinComponent(element, element);
@@ -108,5 +157,118 @@ public class PrinceUtilities {
 			ret.add(complex);
 		}
 		return ret;
+	}
+
+	/**
+	 * Reads an interactions file from Prince and makes a precision cut off and
+	 * returns the corresponding score at that position
+	 * 
+	 * 
+	 * @param interactionsFile
+	 * @param precisionCutOff
+	 * @return
+	 * @throws IOException
+	 */
+	public static double getCorrespondingScoreThreshold(File interactionsFile, double precisionCutOff)
+			throws IOException {
+		final List<String> lines = Files.readAllLines(interactionsFile.toPath());
+		final TObjectIntMap<String> indexesByColumnNames = new TObjectIntHashMap<String>();
+		final String headers = lines.get(0);
+		final String[] splitHeader = headers.split(",");
+		for (int index = 0; index < splitHeader.length; index++) {
+			final String header = splitHeader[index].replace("\"", "");
+			indexesByColumnNames.put(header, index);
+		}
+		// depending on whether Prince was run with ensemble classifier or not, we will
+		// have mean or score as the column with the score. the score is the higher the
+		// better.
+		int scoreIndex;
+		if (indexesByColumnNames.containsKey("score")) {
+			scoreIndex = indexesByColumnNames.get("score");
+		} else {
+			scoreIndex = indexesByColumnNames.get("mean");
+		}
+		int maxLine = 1;
+		for (int i = 1; i < lines.size(); i++) {
+			final String line = lines.get(i);
+			final String[] split = line.split(",");
+
+			// it would be in the maximum file line in which the precision is above the
+			// threshold
+			// lines before could have a lower precision, or even no precision at all, but
+			// the interaction score will be higher and so we will keep them
+			if (split.length < indexesByColumnNames.get("precision")) {
+				continue;
+			}
+			final String precisionString = split[indexesByColumnNames.get("precision")];
+			final Double precision = Double.valueOf(precisionString);
+			if (precision >= precisionCutOff) {
+				maxLine = i;
+			}
+		}
+
+		final String line = lines.get(maxLine);
+		final String[] split = line.split(",");
+		final String scoreString = split[scoreIndex];
+		final double score = Double.valueOf(scoreString);
+		return score;
+	}
+
+	public static List<ProteinPairInteraction> getProteinProteinInteractions(File interactionsFile,
+			double precisionCutOff) throws IOException {
+		final List<String> lines = Files.readAllLines(interactionsFile.toPath());
+		final TObjectIntMap<String> indexesByColumnNames = new TObjectIntHashMap<String>();
+		final String headers = lines.get(0);
+		final String[] splitHeader = headers.split(",");
+		for (int index = 0; index < splitHeader.length; index++) {
+			final String header = splitHeader[index].replace("\"", "");
+			indexesByColumnNames.put(header, index);
+		}
+		// depending on whether Prince was run with ensemble classifier or not, we will
+		// have mean or score as the column with the score. the score is the higher the
+		// better.
+		int scoreIndex;
+		if (indexesByColumnNames.containsKey("score")) {
+			scoreIndex = indexesByColumnNames.get("score");
+		} else {
+			scoreIndex = indexesByColumnNames.get("mean");
+		}
+		int maxLine = 1;
+		for (int i = 1; i < lines.size(); i++) {
+			final String line = lines.get(i);
+			final String[] split = line.split(",");
+
+			// it would be in the maximum file line in which the precision is above the
+			// threshold
+			// lines before could have a lower precision, or even no precision at all, but
+			// the interaction score will be higher and so we will keep them
+			if (split.length < indexesByColumnNames.get("precision")) {
+				continue;
+			}
+			final String precisionString = split[indexesByColumnNames.get("precision")];
+			final Double precision = Double.valueOf(precisionString);
+			if (precision >= precisionCutOff) {
+				maxLine = i;
+			}
+		}
+		final List<ProteinPairInteraction> interactions = new ArrayList<ProteinPairInteraction>();
+		for (int i = 1; i <= maxLine; i++) {
+			final String line = lines.get(i);
+			final String[] split = line.split(",");
+			final String proteinA = split[indexesByColumnNames.get("protein_A")];
+			final String proteinB = split[indexesByColumnNames.get("protein_B")];
+
+			final double[] scores = new double[1];
+			try {
+
+				scores[0] = Double.valueOf(split[scoreIndex]);
+				final ProteinPairInteraction ppi = new ProteinPairInteraction(proteinA, proteinB, scores,
+						ClassLabel.INTRA_COMPLEX);
+				interactions.add(ppi);
+			} catch (final Exception e) {
+				System.out.println(line);
+			}
+		}
+		return interactions;
 	}
 }

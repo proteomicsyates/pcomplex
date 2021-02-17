@@ -393,7 +393,7 @@ public class EpicResultComparator extends AbstractEpicOrPrinceResultsComparator 
 	 * @return
 	 * @throws IOException
 	 */
-	private static List<ProteinComplex> readComplexesFromClustFile(File clustFile) throws IOException {
+	public static List<ProteinComplex> readComplexesFromClustFile(File clustFile) throws IOException {
 		final List<ProteinComplex> ret = new ArrayList<ProteinComplex>();
 		final List<String> lines = Files.readAllLines(clustFile.toPath());
 		int num = 1;

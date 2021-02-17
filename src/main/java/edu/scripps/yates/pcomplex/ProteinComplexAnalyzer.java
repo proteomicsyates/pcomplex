@@ -92,14 +92,16 @@ public class ProteinComplexAnalyzer {
 //			"2019_11_19_Mixed_bed_SEC",//
 //			"2019_11_19_Mixed_bed_EvoSep", //
 //			"08_13_2020_MB_SEC_Fractions",//
-			"Beta_cell_PCP" };
+//			"Beta_cell_PCP"// ,
+			"Beta_cell_PCP_2"//
+	};
 
 	// public static final String[] projectsNames = { //
 	//
 	// "FF_Drug_HEK" //
 
 	// };
-	public static String ORGANISM = "Human";
+	public static String ORGANISM = "Mouse";
 	private static boolean runOverlapping = false;
 
 //	public static String basePath = "Z:\\share\\Salva\\data\\asaviola\\protein complexes";
@@ -117,17 +119,18 @@ public class ProteinComplexAnalyzer {
 	/*****************************/
 	/** DOWNLOAD FILES **/
 	/*****************************/
-	private static final boolean downloadFiles = false;
+	private static final boolean downloadFiles = true;
 
 	/*****************************/
 	/**
 	 * if we want to force to download DTASelects from an specific database, use
 	 * this. The rest of DTASelect in an experiment, will be deleted and ignored.
 	 *****************************/
-//	private final String databaseRequirement = "Mus_musculus_reviewed_";
-	private final String databaseRequirement = "Uniprot_human_reviewed";
+	private final String databaseRequirement = "Mus_musculus_reviewed_";
+//	private final String databaseRequirement = "Uniprot_human_reviewed";
+//	private final String databaseRequirement = "Rattus_norvegicus";
 	// ** just grab the latest search on each experiment **/
-	private final boolean keepOnlyLatestSearch = true;
+	private final boolean keepOnlyLatestSearch = false;
 
 	/**
 	 * REFERENCE DATABASES
@@ -365,6 +368,13 @@ public class ProteinComplexAnalyzer {
 	}
 
 	private SeparationExperiment analyzeFractions(String projectName) throws IOException {
+		// load DBs
+		// add to list of DBs
+		// do this before reading summary file because when crating protein components,
+		// the accession choosen when there is a group is the accession that is in
+		// reference database
+		final List<ProteinComplexDB> dbs = getDBs();
+
 		final File projectFolder = getProjectFolder(projectName);
 		final File projectSummaryFile = getProjectSummaryFile(projectName);
 		if (!projectSummaryFile.exists() || projectSummaryFile.length() == 0) {
@@ -385,9 +395,6 @@ public class ProteinComplexAnalyzer {
 
 		// first make the grouping
 		final List<ProteinGroup> groups = GroupingUtil.grouping(dtaSelectFiles, getUPLR());
-		// load DBs
-		// add to list of DBs
-		final List<ProteinComplexDB> dbs = getDBs();
 
 		FileWriter fw = null;
 

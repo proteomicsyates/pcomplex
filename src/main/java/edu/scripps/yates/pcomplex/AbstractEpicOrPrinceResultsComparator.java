@@ -58,18 +58,20 @@ public abstract class AbstractEpicOrPrinceResultsComparator {
 	/**
 	 * Gets a line comparing a list of other complexes with the following values
 	 * :<br>
-	 * total number of complexes we want to compare against others - number of
-	 * complexes overlapping with other complexes - number of complexes not
-	 * overlapping with other complexes
+	 * total number of complexes we want to compare against others - total number of
+	 * other complexes - number of complexes overlapping with other complexes -
+	 * number of complexes not overlapping with other complexes
 	 * 
 	 * @param complexes
 	 * @param otherComplexes
+	 * @param minOverlapScore
 	 * @return
 	 */
-	protected String getComparisonDescription(List<ProteinComplex> complexes, List<ProteinComplex> otherComplexes) {
+	public static String getComparisonDescription(List<ProteinComplex> complexes, List<ProteinComplex> otherComplexes,
+			double minOverlapScore) {
 		final StringBuilder sb = new StringBuilder();
 
-		sb.append(complexes.size() + "\t");
+		sb.append(complexes.size() + "\t" + otherComplexes.size() + "\t");
 
 		int overlapping = 0;
 		for (final ProteinComplex complex : complexes) {

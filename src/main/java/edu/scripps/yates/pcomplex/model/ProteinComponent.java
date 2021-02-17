@@ -32,8 +32,8 @@ public class ProteinComponent {
 		this.acc = chooseOne(acc);
 		this.gene = chooseOne(gene);
 		// deal with ambiguities and select one
-		if (acc == null || gene == null) {
-			if (gene != null) {
+		if (this.acc == null || this.gene == null) {
+			if (this.gene != null) {
 				final Set<String> accs = ProteinComplexAnalyzer.getUniprotGeneMapping().mapGeneToUniprotACC(gene);
 				if (!accs.isEmpty()) {
 					for (final String acc2 : accs) {
@@ -64,7 +64,8 @@ public class ProteinComponent {
 				}
 				this.acc = acc;
 			}
-		} else {
+		}
+		if (this.acc == null || this.gene == null) {
 			this.acc = acc;
 			this.gene = gene;
 		}
@@ -105,6 +106,7 @@ public class ProteinComponent {
 					return acc;
 				}
 			}
+
 			return split[0];
 		} else {
 			return acc2;
