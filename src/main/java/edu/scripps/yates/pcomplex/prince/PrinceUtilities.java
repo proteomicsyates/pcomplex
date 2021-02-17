@@ -16,8 +16,21 @@ import gnu.trove.map.TObjectIntMap;
 import gnu.trove.map.hash.TObjectIntHashMap;
 
 public class PrinceUtilities {
-	private final File interactionsFile = new File(
-			"D:\\Dropbox (Scripps Research)\\beta_cells_PCP\\prince\\Beta_cell_PCP_NSAF_Human_interactions_all.csv");
+	private final static File interactionsFile = new File(
+			"D:\\Dropbox (Scripps Research)\\beta_cells_PCP\\prince\\Beta_cell_PCP_NSAF_Human_1_2_filtered_interactions_score_gt_0.85.csv");
+
+	public static void main(String[] args) {
+		try {
+			// TODO read params from args
+			final Double precisionCutOff = null;
+			final Double scoreCutOff = null;
+			final File clusterOneResultsFile = null;
+			createClusters(interactionsFile, precisionCutOff, scoreCutOff, clusterOneResultsFile);
+			System.out.println("Everything ok");
+		} catch (final IOException e) {
+			e.printStackTrace();
+		}
+	}
 
 	/**
 	 * Reads the interactions created by PrinCE and apply the ClusterONE algorithm
@@ -79,6 +92,7 @@ public class PrinceUtilities {
 				}
 			} else {
 				throw new IllegalArgumentException("Either precision or score should be provided");
+
 			}
 		}
 		System.out.println(
