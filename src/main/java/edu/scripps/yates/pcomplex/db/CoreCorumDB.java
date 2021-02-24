@@ -17,6 +17,7 @@ import edu.scripps.yates.annotations.uniprot.UniprotProteinLocalRetriever;
 import edu.scripps.yates.pcomplex.mi.MolecularInteractionsOntologyClient;
 import edu.scripps.yates.pcomplex.model.ProteinComplex;
 import edu.scripps.yates.pcomplex.model.ProteinComponent;
+import edu.scripps.yates.utilities.strings.StringUtils;
 import gnu.trove.map.hash.THashMap;
 
 public class CoreCorumDB extends ProteinComplexDB {
@@ -38,7 +39,7 @@ public class CoreCorumDB extends ProteinComplexDB {
 	 *                                   "valid.txt"
 	 * @throws IOException
 	 */
-	public CoreCorumDB(File inputFile, String organism, UniprotProteinLocalRetriever uplr,
+	public CoreCorumDB(File inputFile, String[] organisms, UniprotProteinLocalRetriever uplr,
 			boolean filterByPurificationMethod) throws IOException {
 
 		super(null, "Core complexes - CORUM", false, uplr);
@@ -51,7 +52,8 @@ public class CoreCorumDB extends ProteinComplexDB {
 			int numLine = 0;
 			int numInOrganism = 0;
 			int numValid = 00;
-			log.info("Reading CORUM database for " + organism + " from file " + inputFile.getAbsolutePath());
+			log.info("Reading CORUM database for " + StringUtils.getSortedSeparatedValueStringFromChars(organisms, "-")
+					+ " from file " + inputFile.getAbsolutePath());
 			while ((line = br.readLine()) != null) {
 				numLine++;
 				final String[] split = line.split("\t");
@@ -65,47 +67,49 @@ public class CoreCorumDB extends ProteinComplexDB {
 					final String organism2 = split[indexesByHeaders.get("Organism")];
 					final String purificationMethod = split[indexesByHeaders
 							.get("Protein complex purification method")];
+					for (final String organism : organisms) {
+						if (organism == null || organism2.equals(organism)) {
+							numInOrganism++;
+							if (!filterByPurificationMethod || isValid(purificationMethod)) {
+								numValid++;
+								final ProteinComplex proteinComplex = new ProteinComplex(proteinComplexID);
 
-					if (organism == null || organism2.equals(organism)) {
-						numInOrganism++;
-						if (!filterByPurificationMethod || isValid(purificationMethod)) {
-							numValid++;
-							final ProteinComplex proteinComplex = new ProteinComplex(proteinComplexID);
+								proteinComplex.setName(proteinComplexName);
+								proteinComplex.setOrganism(organism2);
+								final String componentsAccString = split[indexesByHeaders.get("subunits(UniProt IDs)")];
+								final String[] split2 = componentsAccString.split(";");
+								final String componentsGeneString = split[indexesByHeaders.get("subunits(Gene name)")];
+								final String[] split3 = componentsGeneString.split(";");
+								final String componentsNamesString = split[indexesByHeaders
+										.get("subunits(Protein name)")];
+								final String[] split4 = componentsNamesString.split(";");
+								for (int i = 0; i < split2.length; i++) {
+									final String acc = split2[i];
+									String gene = null;
+									if (split3.length > i) {
+										gene = split3[i];
+									} else {
+										log.info(componentsGeneString);
+									}
+									String proteinName = null;
+									if (split4.length > i) {
+										proteinName = split4[i];
+									} else {
+										log.info(componentsGeneString);
+									}
 
-							proteinComplex.setName(proteinComplexName);
-							proteinComplex.setOrganism(organism2);
-							final String componentsAccString = split[indexesByHeaders.get("subunits(UniProt IDs)")];
-							final String[] split2 = componentsAccString.split(";");
-							final String componentsGeneString = split[indexesByHeaders.get("subunits(Gene name)")];
-							final String[] split3 = componentsGeneString.split(";");
-							final String componentsNamesString = split[indexesByHeaders.get("subunits(Protein name)")];
-							final String[] split4 = componentsNamesString.split(";");
-							for (int i = 0; i < split2.length; i++) {
-								final String acc = split2[i];
-								String gene = null;
-								if (split3.length > i) {
-									gene = split3[i];
-								} else {
-									log.info(componentsGeneString);
+									final ProteinComponent component = new ProteinComponent(acc, gene);
+									component.setProteinName(proteinName);
+									proteinComplex.addComponent(component);
 								}
-								String proteinName = null;
-								if (split4.length > i) {
-									proteinName = split4[i];
-								} else {
-									log.info(componentsGeneString);
-								}
-
-								final ProteinComponent component = new ProteinComponent(acc, gene);
-								component.setProteinName(proteinName);
-								proteinComplex.addComponent(component);
+								proteinComplexes.add(proteinComplex);
 							}
-							proteinComplexes.add(proteinComplex);
 						}
 					}
 				}
 			}
 			setReady();
-			log.info("CORUM loaded for organism " + organism);
+			log.info("CORUM loaded for organism " + StringUtils.getSortedSeparatedValueStringFromChars(organisms, "-"));
 			log.info(numValid + " complexes are valid as biochemical ones");
 			log.info((numInOrganism - numValid) + " complexes discarded as non biochemical ones");
 		} finally {

@@ -7,6 +7,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.text.DecimalFormat;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -21,7 +22,6 @@ import edu.scripps.yates.pcomplex.model.ProteinComplex;
 import edu.scripps.yates.pcomplex.model.ProteinComponent;
 import edu.scripps.yates.pcomplex.model.ProteinProteinInteraction;
 import edu.scripps.yates.pcomplex.util.ClusterEvaluation;
-import edu.scripps.yates.utilities.venndata.VennData;
 import gnu.trove.set.hash.THashSet;
 
 public class EpicResultComparator extends AbstractEpicOrPrinceResultsComparator {
@@ -72,45 +72,72 @@ public class EpicResultComparator extends AbstractEpicOrPrinceResultsComparator 
 		}
 	}
 
+	public List<ProteinComplex> getPredictedProteinComplexes() throws IOException {
+		return readPredictedProteinComplexes(fileOrFolder);
+	}
+
+	public List<ProteinComplex> getUsedReferenceProteinComplexes() throws IOException {
+		final File referenceComplexes = new File(
+				fileOrFolder.getAbsolutePath() + File.separator + "Out.rf.ref_complexes.txt");
+		return readComplexesFromRefComplexesFile(referenceComplexes);
+	}
+
+	public List<ProteinProteinInteraction> getProteinProteinInteractions() throws IOException {
+		final File ppiFile = new File(fileOrFolder.getAbsolutePath() + File.separator + "Out.rf.comb.pred.txt");
+		return EpicPPIReader.readPPIs(ppiFile);
+	}
+
 	/**
-	 * Compare epic result against other EPIC result
+	 * Compare epic result against other EPIC result. Note that the comparison is
+	 * done by a minimum overlapping score, that is usually 0.25, not by complex IDs
 	 * 
 	 * @return
 	 * 
 	 * @throws IOException
 	 */
-	public File compareWithOtherEPICResult(File epicResultsFolder2) throws IOException {
+	public File compareWithOtherEPICResult(File epicResultsFolder2, File outputReportFile,
+			boolean includeOverlapScoreAnalysis) throws IOException {
+
 		final File epicResultsFolder = super.fileOrFolder;
 		final String experimentName1 = getExperimentName();
 		final List<ProteinComplex> complexes1 = readPredictedProteinComplexes(epicResultsFolder);
-		Set<Object> set1 = complexes1.stream().map(c -> c.getId()).collect(Collectors.toSet());
 
 		final String experimentName2 = getExperimentNameFromEpicFolder(epicResultsFolder2);
 		final List<ProteinComplex> complexes2 = readPredictedProteinComplexes(epicResultsFolder2);
-		Set<Object> set2 = complexes2.stream().map(c -> c.getId()).collect(Collectors.toSet());
 
-		final File outputFile = new File(
-				epicResultsFolder.getAbsolutePath() + File.separator + "epic_summary_" + minOverlapScore + ".txt");
-		final FileWriter fw = new FileWriter(outputFile);
+		final FileWriter fw = new FileWriter(outputReportFile);
+		fw.write("Comparison between protein complexes made using a minimum overlapping score of " + minOverlapScore
+				+ "\n");
+		// all complexes
+		performComparison("ALL", experimentName1, complexes1, experimentName2, complexes2, fw,
+				includeOverlapScoreAnalysis);
 
-		// venn diagram for known Complexes
-		set1 = complexes1.stream().filter(c -> c.isKnown()).map(c -> c.getId()).collect(Collectors.toSet());
-		set2 = complexes2.stream().filter(c -> c.isKnown()).map(c -> c.getId()).collect(Collectors.toSet());
-		final VennData vennKnown = new VennData("Known complexes", experimentName1, set1, experimentName2, set2, null,
-				null);
+		// known complexes
+		final Set<ProteinComplex> kown1 = complexes1.stream().filter(c -> c.isKnown()).collect(Collectors.toSet());
+		final Set<ProteinComplex> kown2 = complexes2.stream().filter(c -> c.isKnown()).collect(Collectors.toSet());
+		performComparison("KNOWN", experimentName1, kown1, experimentName2, kown2, fw, includeOverlapScoreAnalysis);
 
-		fw.write("Comparison between the KNOWN complexes between " + experimentName1 + " and " + experimentName2
-				+ "\n\n");
-		fw.write(vennKnown.toString() + "\n\n\n");
-
-		// venn diagram for unknown Complexes
+		// unknown complexes
 		final Set<ProteinComplex> unkown1 = complexes1.stream().filter(c -> !c.isKnown()).collect(Collectors.toSet());
 		final Set<ProteinComplex> unkown2 = complexes2.stream().filter(c -> !c.isKnown()).collect(Collectors.toSet());
+
+		performComparison("UNKNOWN", experimentName1, unkown1, experimentName2, unkown2, fw,
+				includeOverlapScoreAnalysis);
+		fw.close();
+		log.info("File written at: " + outputReportFile.getAbsolutePath());
+		return outputReportFile;
+	}
+
+	private void performComparison(String comparisonName, String experimentName1, Collection<ProteinComplex> set1,
+			String experimentName2, Collection<ProteinComplex> set2, FileWriter fw, boolean includeOverlapScoreAnalysis)
+			throws IOException {
+		// venn diagram for unknown Complexes
+
 		final Set<ProteinComplex> overlapComplexes = new THashSet<ProteinComplex>();
 		final Set<ProteinComplex> only1Complexes = new THashSet<ProteinComplex>();
-		for (final ProteinComplex complex1 : unkown1) {
+		for (final ProteinComplex complex1 : set1) {
 			boolean overlapped = false;
-			for (final ProteinComplex complex2 : unkown2) {
+			for (final ProteinComplex complex2 : set2) {
 				final double overlap = ClusterEvaluation.getOverlap(complex1, complex2);
 				if (overlap >= minOverlapScore) {
 					overlapped = true;
@@ -124,16 +151,16 @@ public class EpicResultComparator extends AbstractEpicOrPrinceResultsComparator 
 				only1Complexes.add(complex1);
 			}
 		}
-		final int only2Complexes = unkown2.size() - overlapComplexes.size();
+		final int only2Complexes = set2.size() - overlapComplexes.size();
 
-		fw.write("Comparison between the UNKNOWN complexes between " + experimentName1 + " and " + experimentName2
-				+ " with minimum overlap as " + minOverlapScore + "\n\n");
+		fw.write("\nComparison between " + comparisonName + " complexes between " + experimentName1 + " and "
+				+ experimentName2 + " with minimum overlap as " + minOverlapScore + "\n\n");
 		final int union = overlapComplexes.size() + only1Complexes.size() + only2Complexes;
 		fw.write("Union: " + union + " (" + getPercentageOverUnion(union, union) + "%)\n");
-		fw.write("Unkown complexes from " + experimentName1 + ": " + unkown1.size() + " ("
-				+ getPercentageOverUnion(unkown1.size(), union) + "%)\n");
-		fw.write("Unkown complexes from " + experimentName2 + ": " + unkown2.size() + " ("
-				+ getPercentageOverUnion(unkown2.size(), union) + "%)\n");
+		fw.write("Unkown complexes from " + experimentName1 + ": " + set1.size() + " ("
+				+ getPercentageOverUnion(set1.size(), union) + "%)\n");
+		fw.write("Unkown complexes from " + experimentName2 + ": " + set2.size() + " ("
+				+ getPercentageOverUnion(set2.size(), union) + "%)\n");
 		fw.write("Unique to " + experimentName1 + ": " + only1Complexes.size() + " ("
 				+ getPercentageOverUnion(only1Complexes.size(), union) + "%)\n");
 		fw.write("Unique to " + experimentName2 + ": " + only2Complexes + " ("
@@ -141,56 +168,36 @@ public class EpicResultComparator extends AbstractEpicOrPrinceResultsComparator 
 		fw.write("Overlap: " + overlapComplexes.size() + " (" + getPercentageOverUnion(overlapComplexes.size(), union)
 				+ "%)\n");
 
-		fw.write("Min overlap" + "\t" + "Overlapped complexes" + "\t" + "% Overlapped complexes" + "\n");
-		double minOverlap = 0.0;
-		while (minOverlap < 1.0) {
-			try {
+		if (includeOverlapScoreAnalysis) {
+			fw.write("Min overlap" + "\t" + "Overlapped complexes" + "\t" + "% Overlapped complexes" + "\n");
+			double minOverlap = 0.0;
+			while (minOverlap < 1.0) {
+				try {
 
-				final Set<ProteinComplex> overlapComplexesTMP = new THashSet<ProteinComplex>();
+					final Set<ProteinComplex> overlapComplexesTMP = new THashSet<ProteinComplex>();
 
-				for (final ProteinComplex complex1 : unkown1) {
-					boolean overlapped = false;
-					for (final ProteinComplex complex2 : unkown2) {
-						final double overlap = ClusterEvaluation.getOverlap(complex1, complex2);
-						if (overlap >= minOverlap) {
-							overlapped = true;
-							break;
+					for (final ProteinComplex complex1 : set1) {
+						boolean overlapped = false;
+						for (final ProteinComplex complex2 : set2) {
+							final double overlap = ClusterEvaluation.getOverlap(complex1, complex2);
+							if (overlap >= minOverlap) {
+								overlapped = true;
+								break;
+							}
+						}
+						if (overlapped) {
+							// is in overlap
+							overlapComplexesTMP.add(complex1);
 						}
 					}
-					if (overlapped) {
-						// is in overlap
-						overlapComplexesTMP.add(complex1);
-					}
+					fw.write(minOverlap + "\t" + overlapComplexesTMP.size() + "\t"
+							+ getPercentageOverUnion(overlapComplexesTMP.size(), union) + "\n");
+				} finally {
+					minOverlap += 0.05;
 				}
-				fw.write(minOverlap + "\t" + overlapComplexesTMP.size() + "\t"
-						+ getPercentageOverUnion(overlapComplexesTMP.size(), union) + "\n");
-			} finally {
-				minOverlap += 0.05;
 			}
 		}
-
-		fw.write("\n\n\n\nComparison between all the complexes between " + experimentName1 + " and " + experimentName2
-				+ " with minOverlap for unkown=" + minOverlapScore + "\n\n");
-		final int unionTotal = vennKnown.getUnion123().size() + union;
-		fw.write("Union: " + unionTotal + " (" + getPercentageOverUnion(unionTotal, unionTotal) + "%)\n");
-		final int in1 = unkown1.size() + vennKnown.getSize1();
-		fw.write("Unkown complexes from " + experimentName1 + ": " + in1 + " ("
-				+ getPercentageOverUnion(in1, unionTotal) + "%)\n");
-		final int in2 = unkown2.size() + vennKnown.getSize2();
-		fw.write("Unkown complexes from " + experimentName2 + ": " + in2 + " ("
-				+ getPercentageOverUnion(in2, unionTotal) + "%)\n");
-		final int onlyIn1 = only1Complexes.size() + vennKnown.getUniqueTo1().size();
-		fw.write("Unique to " + experimentName1 + ": " + onlyIn1 + " (" + getPercentageOverUnion(onlyIn1, unionTotal)
-				+ "%)\n");
-		final int onlyIn2 = only2Complexes + vennKnown.getUniqueTo2().size();
-		fw.write("Unique to " + experimentName2 + ": " + onlyIn2 + " (" + getPercentageOverUnion(onlyIn2, unionTotal)
-				+ "%)\n");
-		final int overlap12 = overlapComplexes.size() + vennKnown.getIntersection12().size();
-		fw.write("Overlap: " + overlap12 + " (" + getPercentageOverUnion(overlap12, unionTotal) + "%)\n");
-
-		fw.close();
-		log.info("File written at: " + outputFile.getAbsolutePath());
-		return outputFile;
+		fw.flush();
 	}
 
 	private static final DecimalFormat df = new DecimalFormat("#.#");
@@ -308,22 +315,20 @@ public class EpicResultComparator extends AbstractEpicOrPrinceResultsComparator 
 
 			final String fileName = FilenameUtils.getName(epicFolder.getAbsolutePath());
 			if (fileName.endsWith("ref_complexes.txt")) {
-				final List<ProteinComplex> knownComplexes = EpicResultComparator
-						.readComplexesFromRefComplexesFile(epicFolder);
+				final List<ProteinComplex> knownComplexes = readComplexesFromRefComplexesFile(epicFolder);
 				return knownComplexes;
 			} else if (fileName.endsWith("clust.txt")) {
-				final List<ProteinComplex> unknownComplexes = EpicResultComparator
-						.readComplexesFromClustFile(epicFolder);
+				final List<ProteinComplex> unknownComplexes = readComplexesFromClustFile(epicFolder);
 				return unknownComplexes;
 			}
 			throw new IllegalArgumentException(epicFolder.getAbsolutePath()
 					+ " MUST be a folder in which EPIC results are stored (Out.rf.ref_complexes.txt and Out.rf.exp.clust.txt) or one of these two files");
 		}
 
-		final List<ProteinComplex> referenceComplexes = EpicResultComparator
-				.readComplexesFromRefComplexesFile(getReferenceComplexFile(epicFolder));
-		final List<ProteinComplex> predictedComplexes = EpicResultComparator
-				.readComplexesFromClustFile(getPredictedComplexesFile(epicFolder));
+		final List<ProteinComplex> referenceComplexes = readComplexesFromRefComplexesFile(
+				getReferenceComplexFile(epicFolder));
+		final List<ProteinComplex> predictedComplexes = readComplexesFromClustFile(
+				getPredictedComplexesFile(epicFolder));
 
 		// we mark as known the ones that have an overlap of at least 0.25 with at least
 		// one known complex from the reference

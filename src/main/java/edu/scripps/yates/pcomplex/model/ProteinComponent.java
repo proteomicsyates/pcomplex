@@ -19,15 +19,22 @@ public class ProteinComponent {
 	private final String rawAcc; // acc that can contain more than one accession separated by #
 	private List<String> individualAccs;
 
+	/**
+	 * This will determine whether to use the ACC or the GENE when checking the
+	 * uniqueness of the {@link ProteinComponent}, and comparing them. For
+	 * multi-species comparison, this should be set to true
+	 */
+	public static boolean TAKE_GENES_FOR_COMPARISONS = false;
+
 	// to use such as when there is an ambiguity, we remove one by keeping the
 	// protein that is in the reference database.
 	public static List<ProteinComplexDB> dbs = new ArrayList<ProteinComplexDB>();
 
 	public ProteinComponent(String acc, String gene) throws IOException {
 		if (acc != null) {
-			this.rawAcc = acc;
+			rawAcc = acc;
 		} else {
-			this.rawAcc = gene;
+			rawAcc = gene;
 		}
 		this.acc = chooseOne(acc);
 		this.gene = chooseOne(gene);
@@ -129,7 +136,11 @@ public class ProteinComponent {
 	@Override
 	public int hashCode() {
 		if (hashCode == -1) {
-			hashCode = HashCodeBuilder.reflectionHashCode(getKey());
+			if (TAKE_GENES_FOR_COMPARISONS && getGene() != null) {
+				hashCode = HashCodeBuilder.reflectionHashCode(getGene());
+			} else {
+				hashCode = HashCodeBuilder.reflectionHashCode(getKey());
+			}
 		}
 		return hashCode;
 	}
@@ -140,6 +151,9 @@ public class ProteinComponent {
 			// 2 components are true if they have the same ACC or Gene, taking
 			// into account that they can be ambiguous
 			final ProteinComponent pc = (ProteinComponent) obj;
+			if (TAKE_GENES_FOR_COMPARISONS && getGene() != null && pc.getGene() != null) {
+				return pc.getGene().equalsIgnoreCase(getGene());
+			}
 			return pc.getKey().equals(getKey());
 		}
 		return super.equals(obj);

@@ -260,13 +260,21 @@ public class ProteinComplex {
 
 			if (proteinsAndGenes.contains(component.getAcc()) || proteinsAndGenes.contains(component.getGene())) {
 				ret.add(component);
-			} else if (ProteinComplexAnalyzer.ORGANISM != null || getOrganism() != null) {
+			} else if ((ProteinComplexAnalyzer.ORGANISMS != null && ProteinComplexAnalyzer.ORGANISMS.length > 0)
+					|| getOrganism() != null) {
 				// only if there is either acc or gene missing, otherwise it should be found
 				if (component.getAcc() == null || component.getGene() == null) {
-					final String organism = ProteinComplexAnalyzer.ORGANISM != null ? ProteinComplexAnalyzer.ORGANISM
-							: getOrganism();
-					final UniprotGeneMapping geneMapping = UniprotGeneMapping
-							.getInstance(new File(ProteinComplexAnalyzer.uniprotReleasesFolder), organism);
+					UniprotGeneMapping geneMapping = null;
+					if (ProteinComplexAnalyzer.ORGANISMS != null) {
+						geneMapping = UniprotGeneMapping.getInstance(
+								new File(ProteinComplexAnalyzer.uniprotReleasesFolder),
+								ProteinComplexAnalyzer.ORGANISMS);
+					} else {
+						final String organism = getOrganism();
+						geneMapping = UniprotGeneMapping
+								.getInstance(new File(ProteinComplexAnalyzer.uniprotReleasesFolder), organism);
+					}
+
 					try {
 						final Set<String> mapGeneToUniprotACC = geneMapping.mapGeneToUniprotACC(component.getGene());
 						for (final String uniprot : mapGeneToUniprotACC) {
@@ -610,7 +618,7 @@ public class ProteinComplex {
 	}
 
 	public void setKnown(boolean b) {
-		this.known = b;
+		known = b;
 
 	}
 

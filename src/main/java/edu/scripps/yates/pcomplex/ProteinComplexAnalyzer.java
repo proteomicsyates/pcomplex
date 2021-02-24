@@ -57,6 +57,7 @@ import edu.scripps.yates.utilities.progresscounter.ProgressCounter;
 import edu.scripps.yates.utilities.progresscounter.ProgressPrintingType;
 import edu.scripps.yates.utilities.proteomicsmodel.MSRun;
 import edu.scripps.yates.utilities.sequence.PeptideSequenceProperties;
+import edu.scripps.yates.utilities.strings.StringUtils;
 import edu.scripps.yates.utilities.util.Pair;
 import edu.scripps.yates.utilities.venndata.VennData;
 import gnu.trove.list.TDoubleList;
@@ -101,14 +102,14 @@ public class ProteinComplexAnalyzer {
 	// "FF_Drug_HEK" //
 
 	// };
-	public static String ORGANISM = "Mouse";
+	public static String[] ORGANISMS = { "Rat", "Mouse", "Human" };
 	private static boolean runOverlapping = false;
 
-//	public static String basePath = "Z:\\share\\Salva\\data\\asaviola\\protein complexes";
-	public static String basePath = "C:\\Users\\salvador\\Desktop\\Anthony\\protein_complexes";
+	public static String basePath = "Z:\\share\\Salva\\data\\asaviola\\protein complexes";
+//	public static String basePath = "C:\\Users\\salvador\\Desktop\\Anthony\\protein_complexes";
 	public static String downloadFilesPath = basePath + "\\experiments";
-//	public static String uniprotReleasesFolder = "Z:\\share\\Salva\\data\\uniprotKB";
-	public static String uniprotReleasesFolder = "C:\\Users\\salvador\\Desktop\\uniprotKB";
+	public static String uniprotReleasesFolder = "Z:\\share\\Salva\\data\\uniprotKB";
+//	public static String uniprotReleasesFolder = "C:\\Users\\salvador\\Desktop\\uniprotKB";
 
 	private static int defaultMinNumComponentsInComplex = 2;
 	private final static DateFormat datef = new SimpleDateFormat("MM-dd-yyyy HH_mm_ss");
@@ -119,16 +120,16 @@ public class ProteinComplexAnalyzer {
 	/*****************************/
 	/** DOWNLOAD FILES **/
 	/*****************************/
-	private static final boolean downloadFiles = true;
+	private static final boolean downloadFiles = false;
 
 	/*****************************/
 	/**
 	 * if we want to force to download DTASelects from an specific database, use
 	 * this. The rest of DTASelect in an experiment, will be deleted and ignored.
 	 *****************************/
-	private final String databaseRequirement = "Mus_musculus_reviewed_";
+//	private final String databaseRequirement = "Mus_musculus_reviewed_";
 //	private final String databaseRequirement = "Uniprot_human_reviewed";
-//	private final String databaseRequirement = "Rattus_norvegicus";
+	private final String databaseRequirement = "Rattus_norvegicus";
 	// ** just grab the latest search on each experiment **/
 	private final boolean keepOnlyLatestSearch = false;
 
@@ -355,7 +356,7 @@ public class ProteinComplexAnalyzer {
 			final boolean mapToGENESYNONIM = false;
 			final boolean mapToENSEMBL = false;
 			final boolean mapToGENENAME = true;
-			geneMapping = UniprotGeneMapping.getInstance(new File(uniprotReleasesFolder), ORGANISM, mapToENSEMBL,
+			geneMapping = UniprotGeneMapping.getInstance(new File(uniprotReleasesFolder), ORGANISMS, mapToENSEMBL,
 					mapToGENENAME, mapToGENESYNONIM);
 		}
 		return geneMapping;
@@ -1512,7 +1513,9 @@ public class ProteinComplexAnalyzer {
 			final List<ProteinComponent> pcs = complex.getComponentsNotInProteinsAndGenes(totalProteinKeys);
 			List<String> list = null;
 			// if (complex.isGeneNames()) {
-			list = pcs.stream().map(pc -> pc.toString() + "_" + ORGANISM).collect(Collectors.toList());
+			list = pcs.stream()
+					.map(pc -> pc.toString() + "_" + StringUtils.getSortedSeparatedValueStringFromChars(ORGANISMS, "-"))
+					.collect(Collectors.toList());
 			// }
 			totalProteinsNotCoveredInPartialComplexes.addAll(list);
 		}
@@ -1624,7 +1627,7 @@ public class ProteinComplexAnalyzer {
 
 	public static ProteinComplexDB loadCoreCorumProteinComplexes(boolean filterByPurificationMethod)
 			throws IOException {
-		final ProteinComplexDB proteinComplexDB = new CoreCorumDB(getCoreCorumFile(), ORGANISM, getUPLR(),
+		final ProteinComplexDB proteinComplexDB = new CoreCorumDB(getCoreCorumFile(), ORGANISMS, getUPLR(),
 				filterByPurificationMethod);
 		return proteinComplexDB;
 	}
@@ -1760,7 +1763,7 @@ public class ProteinComplexAnalyzer {
 
 	private void downloadFiles(IP2Util ip2Util, String projectName) throws IOException, JSchException, SftpException {
 		final Map<String, List<String>> dtaSelectsInProject = ip2Util.getDTASelectsInProject(
-				this.keepOnlyLatestSearch || this.databaseRequirement == null || "".equals(this.databaseRequirement));
+				keepOnlyLatestSearch || databaseRequirement == null || "".equals(databaseRequirement));
 
 		for (final String experimentName : dtaSelectsInProject.keySet()) {
 			try {
