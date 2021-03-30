@@ -128,8 +128,8 @@ public class ProteinComplexAnalyzer {
 	 * this. The rest of DTASelect in an experiment, will be deleted and ignored.
 	 *****************************/
 //	private final String databaseRequirement = "Mus_musculus_reviewed_";
-//	private final String databaseRequirement = "Uniprot_human_reviewed";
-	private final String databaseRequirement = "Rattus_norvegicus";
+	private final String databaseRequirement = "Uniprot_human_reviewed";
+//	private final String databaseRequirement = "Rattus_norvegicus";
 	// ** just grab the latest search on each experiment **/
 	private final boolean keepOnlyLatestSearch = false;
 
@@ -147,7 +147,7 @@ public class ProteinComplexAnalyzer {
 
 	//
 	private final boolean generateHeatMapsForAllComplexes = false;
-	private final boolean compareWithProteinComplexDBs = true;
+	private final boolean compareWithProteinComplexDBs = false;
 	private final boolean generateHeatMapsForIndividualProteinComplexes = false;
 
 	private static UniprotGeneMapping geneMapping;
@@ -171,13 +171,14 @@ public class ProteinComplexAnalyzer {
 				exps.add(exp);
 				for (final DataType dataType : DataType.values()) {
 					// this file will be for PRINCE
-					final File out = exp.exportToTextSeparatedValues(new File(args[0]).getParentFile(), dataType, ",",
-							true, false);
+					final File out = exp.exportToFileForPRINCE(new File(args[0]).getParentFile(), dataType);
 					log.info("File created at: " + out.getAbsolutePath());
 					// and this file will be for EPIC
-					final File out2 = exp.exportToTextSeparatedValues(new File(args[0]).getParentFile(), dataType, "\t",
-							false, dataType == DataType.NSAF);
+					final File out2 = exp.exportToFileForEPIC(new File(args[0]).getParentFile(), dataType);
 					log.info("File created at: " + out2.getAbsolutePath());
+					// and this file will be for PCProphet
+					final File out3 = exp.exportToFileForPCProphet(new File(args[0]).getParentFile(), dataType);
+					log.info("File created at: " + out3.getAbsolutePath());
 				}
 			}
 			pcan.getFileWriterForR().close();
@@ -1758,7 +1759,11 @@ public class ProteinComplexAnalyzer {
 	}
 
 	public static UniprotProteinLocalRetriever getUPLR() {
-		return new UniprotProteinLocalRetriever(new File(uniprotReleasesFolder), true);
+		final UniprotProteinLocalRetriever uniprotProteinLocalRetriever = new UniprotProteinLocalRetriever(
+				new File(uniprotReleasesFolder), true);
+		uniprotProteinLocalRetriever.setRetrieveFastaIsoforms(false);
+		uniprotProteinLocalRetriever.setRetrieveFastaIsoformsFromMainForms(false);
+		return uniprotProteinLocalRetriever;
 	}
 
 	private void downloadFiles(IP2Util ip2Util, String projectName) throws IOException, JSchException, SftpException {
