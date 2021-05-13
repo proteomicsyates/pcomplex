@@ -5,19 +5,23 @@ import java.io.FileFilter;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import org.apache.commons.compress.utils.FileNameUtils;
 
 import edu.scripps.yates.dtaselectparser.DTASelectParser;
 import edu.scripps.yates.utilities.annotations.uniprot.UniprotGeneMapping;
+import edu.scripps.yates.utilities.fasta.FastaParser;
 import edu.scripps.yates.utilities.grouping.GroupableProtein;
 import edu.scripps.yates.utilities.grouping.PAnalyzer;
+import edu.scripps.yates.utilities.grouping.ProteinEvidence;
 import edu.scripps.yates.utilities.grouping.ProteinGroup;
 import edu.scripps.yates.utilities.proteomicsmodel.Peptide;
-import edu.scripps.yates.utilities.proteomicsmodel.Protein;
 import edu.scripps.yates.utilities.proteomicsmodel.staticstorage.StaticProteomicsModelStorage;
 import edu.scripps.yates.utilities.venndata.VennData;
 import gnu.trove.map.hash.THashMap;
@@ -33,11 +37,12 @@ import gnu.trove.set.hash.THashSet;
  */
 public class TwoReplicatesDTASelectReader {
 
-//	private final static File basePath = new File(
-//			"C:\\Users\\salvador\\Dropbox (Scripps Research)\\beta_cells_PCP\\DTASelect files");
-	private final static File basePath = new File("D:\\Dropbox (Scripps Research)\\beta_cells_PCP\\DTASelect files");
-	private static File uniprotPath = new File("Z:\\share\\Salva\\UniprotKB");
+	private final static File basePath = new File(
+			"C:\\Users\\salvador\\Dropbox (Scripps Research)\\beta_cells_PCP\\DTASelect files");
+//	private final static File basePath = new File("D:\\Dropbox (Scripps Research)\\beta_cells_PCP\\DTASelect files");
+	private static File uniprotPath = new File("C:\\Users\\salvador\\Desktop\\uniprotKB");
 
+//	private static File uniprotPath = new File("Z:\\share\\Salva\\UniprotKB");
 	public static void main(String[] args) {
 		try {
 			final File outputFile = new File(basePath + File.separator + "Summary_numbers_1_2_replicates.txt");
@@ -46,7 +51,12 @@ public class TwoReplicatesDTASelectReader {
 			final Map<String, Set<String>> genesBySpecies = new THashMap<String, Set<String>>();
 			final Map<String, Set<String>> peptidesBySpecies = new THashMap<String, Set<String>>();
 			for (final String specie : species) {
-
+				final File genesFile = new File(
+						basePath + File.separator + "Representative_genes_1_2_replicates_" + specie + ".txt");
+				final FileWriter fwGenes = new FileWriter(genesFile);
+				final File proteinFile = new File(
+						basePath + File.separator + "Representative_protein_1_2_replicates_" + specie + ".txt");
+				final FileWriter fwProteins = new FileWriter(proteinFile);
 				fw.write("Species:\t" + specie + "\n");
 				final File[] folders = basePath.listFiles(new FileFilter() {
 
@@ -84,22 +94,40 @@ public class TwoReplicatesDTASelectReader {
 				fw.write("Number of Protein groups:\t" + groups.size() + "\n");
 				fw.write("----------------------------------------\n\n");
 				fw.flush();
+
 				// genes
 				genesBySpecies.put(specie, new THashSet<String>());
 				final UniprotGeneMapping geneMapper = UniprotGeneMapping.getInstance(uniprotPath, species, false, true,
 						false);
-				for (final Protein protein : parser.getProteins()) {
-					final String acc = protein.getAccession();
-					String gene = null;
-					final Set<String> genes = geneMapper.mapUniprotACCToGene(acc);
-					if (!genes.isEmpty()) {
-						gene = genes.iterator().next();
+				for (final ProteinGroup proteinGroup : groups) {
+
+					final List<String> accs = getIndividualProteinsSortedByRepresentativity(proteinGroup);
+					for (final String acc : accs) {
+						String gene = null;
+						final Set<String> genes = geneMapper.mapUniprotACCToGene(acc);
+						if (!genes.isEmpty()) {
+							gene = genes.iterator().next();
+						} else {
+							continue; // try with next acc
+						}
+						if (gene == null) {
+							continue; // try with next acc
+						}
+						genesBySpecies.get(specie).add(gene);
+
 					}
-					if (gene == null) {
-						gene = acc;
-					}
-					genesBySpecies.get(specie).add(gene);
+					fwProteins.write(accs.get(0) + "\n");
 				}
+				// now iterate over the set, so that we dont have repeated genes
+				for (final String gene : genesBySpecies.get(specie)) {
+					fwGenes.write(gene + "\n");
+				}
+				fwGenes.close();
+				System.out.println(
+						"File with representative genes in " + specie + " written at: " + genesFile.getAbsolutePath());
+				fwProteins.close();
+				System.out.println("File with representative proteins in " + specie + " written at: "
+						+ genesFile.getAbsolutePath());
 				// peptides
 				peptidesBySpecies.put(specie, new THashSet<String>());
 				for (final Peptide peptide : parser.getPeptides()) {
@@ -113,6 +141,51 @@ public class TwoReplicatesDTASelectReader {
 		} catch (final IOException e) {
 			e.printStackTrace();
 		}
+	}
+
+	private static List<String> getIndividualProteinsSortedByRepresentativity(ProteinGroup proteinGroup) {
+		final List<GroupableProtein> ret = new ArrayList<GroupableProtein>();
+		ret.addAll(proteinGroup);
+		final Set<String> accs = new THashSet<String>();
+		final List<GroupableProtein> ret2 = new ArrayList<GroupableProtein>();
+		for (final GroupableProtein protein : proteinGroup) {
+			if (!accs.contains(protein.getAccession())) {
+				ret2.add(protein);
+				accs.add(protein.getAccession());
+			}
+		}
+		// sort them by representativity
+		Collections.sort(ret2, getAccComparatorByRepresentativity());
+		// map to accs
+		final List<String> accs2 = ret.stream().map(p -> p.getAccession()).collect(Collectors.toList());
+		return accs2;
+	}
+
+	private static Comparator<GroupableProtein> getAccComparatorByRepresentativity() {
+		final Comparator<GroupableProtein> comparator = new Comparator<GroupableProtein>() {
+
+			@Override
+			public int compare(GroupableProtein p1, GroupableProtein p2) {
+				if (p1.getAccession().equals(p2.getAccession())) {
+					return 0;
+				}
+				if (p1.getEvidence() == ProteinEvidence.CONCLUSIVE && p2.getEvidence() != ProteinEvidence.CONCLUSIVE) {
+					return -1;
+				}
+				if (p1.getEvidence() != ProteinEvidence.CONCLUSIVE && p2.getEvidence() == ProteinEvidence.CONCLUSIVE) {
+					return 1;
+				}
+				if (FastaParser.isContaminant(p1.getAccession())) {
+					return 1;
+				}
+				if (FastaParser.isContaminant(p2.getAccession())) {
+					return -1;
+				}
+				return 0;
+			}
+
+		};
+		return comparator;
 	}
 
 	private static void reportVennDiagram(String title, Map<String, Set<String>> map, FileWriter fw)
