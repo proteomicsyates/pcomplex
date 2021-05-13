@@ -87,7 +87,7 @@ public class ProteinComponent {
 		this.gene = gene;
 	}
 
-	private boolean isInReferenceDB(String acc) {
+	private static boolean isInReferenceDB(String acc) {
 
 		for (final ProteinComplexDB db : dbs) {
 			if (!db.getProteinComplexesByProtein(acc).isEmpty()) {
@@ -102,12 +102,12 @@ public class ProteinComponent {
 	 * If there is more than one acc, Returns the one that is present in the
 	 * reference database or the first one if not
 	 * 
-	 * @param acc2
+	 * @param rawAcc
 	 * @return
 	 */
-	private String chooseOne(String acc2) {
-		if (acc2 != null && acc2.contains(ProteinComplexAnalyzer.AMBIGUOUS_SEPARATOR)) {
-			final String[] split = acc2.split(ProteinComplexAnalyzer.AMBIGUOUS_SEPARATOR);
+	public static String chooseOne(String rawAcc) {
+		if (rawAcc != null && rawAcc.contains(ProteinComplexAnalyzer.AMBIGUOUS_SEPARATOR)) {
+			final String[] split = rawAcc.split(ProteinComplexAnalyzer.AMBIGUOUS_SEPARATOR);
 			for (final String acc : split) {
 				if (isInReferenceDB(acc)) {
 					return acc;
@@ -116,7 +116,7 @@ public class ProteinComponent {
 
 			return split[0];
 		} else {
-			return acc2;
+			return rawAcc;
 		}
 	}
 

@@ -48,9 +48,6 @@ public class SeparationExperiment {
 
 	public void addProtein(String fractionName, int fractionNumber, Protein protein) {
 		final String acc = protein.getAcc();
-		if (acc.contains("A0A0B4J2D5") || acc.contains("P0DPI2")) {
-			log.info("asdf");
-		}
 		if (!proteinACCList.contains(acc)) {
 			proteinACCList.add(acc);
 		}
@@ -200,6 +197,87 @@ public class SeparationExperiment {
 		return ret;
 	}
 
+	public File exportToFileForPRINCE(File folder, DataType dataType) throws IOException {
+		return exportToTextSeparatedValues(folder, dataType, ",", true, false);
+	}
+
+	public File exportToFileForEPIC(File folder, DataType dataType) throws IOException {
+		return exportToTextSeparatedValues(folder, dataType, "\t", false, dataType == DataType.NSAF);
+	}
+
+	public File exportToFileForPCProphet(File folder, DataType dataType) throws IOException {
+		final List<Fraction> fractionsSorted = getSortedFractions();
+
+		// take all acccessions in the experiment
+		final List<String> rawAccs = getProteinACCList();
+
+		// sort them alphabetically by gene
+		Collections.sort(rawAccs);
+		// open file to write
+		final String extension = ".pcprophet.tsv";
+
+		final File outputFile = new File(
+				folder.getAbsolutePath() + File.separator + projectName + "_" + dataType + extension);
+		final FileWriter fw = new FileWriter(outputFile);
+		// header
+
+		fw.write("GN\tID");
+
+		for (final Fraction fraction : fractionsSorted) {
+			fw.write("\t" + fraction.getFractionNumber());
+		}
+		fw.write("\n");
+		int numProteinDiscarded = 0;
+		// cannot have repeated genes
+		int numProteinDiscardedBecauseRepeatedGenes = 0;
+		final Set<String> genes = new THashSet<String>();
+		for (final String rawAcc : rawAccs) {
+			boolean skip = false;
+			final String acc = ProteinComponent.chooseOne(rawAcc);
+			String gene = null;
+			final StringBuilder sb = new StringBuilder();
+			int maxNumNonZeroConsecutiveFractions = 0;
+			int nonZeroFraction = 0;
+			for (final Fraction fraction : fractionsSorted) {
+				final Protein protein = fraction.getProteinByAcc(rawAcc);
+				if (protein != null && gene == null) {
+					gene = protein.getGene().toUpperCase();
+					if (genes.contains(gene)) {
+						log.info("Skipping repeated gene " + gene + " from protein " + acc);
+						skip = true;
+					}
+					genes.add(gene);
+				}
+				if (protein != null) {
+					sb.append(getData(protein, dataType, 1.0));
+
+					nonZeroFraction++;
+					if (nonZeroFraction > maxNumNonZeroConsecutiveFractions) {
+						maxNumNonZeroConsecutiveFractions = nonZeroFraction;
+					}
+				} else {
+					sb.append("0");
+					nonZeroFraction = 0;
+				}
+
+				sb.append("\t");
+			}
+			if (skip) {
+				numProteinDiscardedBecauseRepeatedGenes++;
+				continue;
+			}
+			if (maxNumNonZeroConsecutiveFractions >= MIN_CONSECUTIVE_NON_ZERO_FRACTIONS) {
+				fw.write(acc + "\t" + gene + "\t" + sb.toString() + "\n");
+			} else {
+				numProteinDiscarded++;
+			}
+		}
+		fw.close();
+		log.info(numProteinDiscardedBecauseRepeatedGenes + " proteins discarded for mapping to a repeated gene");
+		log.info(numProteinDiscarded + " proteins discarded for not having at least 2 consecutive non zero fractions");
+		return outputFile;
+	}
+
 	/**
 	 * Exports a text table separated by tabs in a file located in the same folder
 	 * as the properties file and with the name of the project.
@@ -211,16 +289,7 @@ public class SeparationExperiment {
 	 */
 	public File exportToTextSeparatedValues(File folder, DataType dataType, String separator,
 			boolean includeReplicateColumn, boolean normalizeValuesAsMinEquals1) throws IOException {
-		final List<Fraction> fractionsSorted = getFractions();
-
-		// sort fractions by fraction number
-		Collections.sort(fractionsSorted, new Comparator<Fraction>() {
-
-			@Override
-			public int compare(Fraction o1, Fraction o2) {
-				return Integer.compare(o1.getFractionNumber(), o2.getFractionNumber());
-			}
-		});
+		final List<Fraction> fractionsSorted = getSortedFractions();
 
 		double multiplicativeFactor = 1.0;
 		if (normalizeValuesAsMinEquals1) {
