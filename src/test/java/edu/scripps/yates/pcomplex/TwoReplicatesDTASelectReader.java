@@ -37,9 +37,9 @@ import gnu.trove.set.hash.THashSet;
  */
 public class TwoReplicatesDTASelectReader {
 
-	private final static File basePath = new File(
-			"C:\\Users\\salvador\\Dropbox (Scripps Research)\\beta_cells_PCP\\DTASelect files");
-//	private final static File basePath = new File("D:\\Dropbox (Scripps Research)\\beta_cells_PCP\\DTASelect files");
+//	private final static File basePath = new File(
+//			"C:\\Users\\salvador\\Dropbox (Scripps Research)\\beta_cells_PCP\\DTASelect files");
+	private final static File basePath = new File("D:\\Dropbox (Scripps Research)\\beta_cells_PCP\\DTASelect files");
 	private static File uniprotPath = new File("C:\\Users\\salvador\\Desktop\\uniprotKB");
 
 //	private static File uniprotPath = new File("Z:\\share\\Salva\\UniprotKB");

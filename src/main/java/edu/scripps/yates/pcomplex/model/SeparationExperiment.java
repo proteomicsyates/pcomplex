@@ -267,7 +267,7 @@ public class SeparationExperiment {
 				continue;
 			}
 			if (maxNumNonZeroConsecutiveFractions >= MIN_CONSECUTIVE_NON_ZERO_FRACTIONS) {
-				fw.write(acc + "\t" + gene + "\t" + sb.toString() + "\n");
+				fw.write(gene + "\t" + acc + "\t" + sb.toString() + "\n");
 			} else {
 				numProteinDiscarded++;
 			}

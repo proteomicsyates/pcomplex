@@ -94,8 +94,9 @@ public class ProteinComplexAnalyzer {
 //			"2019_11_19_Mixed_bed_EvoSep", //
 //			"08_13_2020_MB_SEC_Fractions",//
 //			"Beta_cell_PCP"// ,
-			"Beta_cell_PCP_2"//
-	};
+//			"Beta_cell_PCP_2"//
+//			"2020_Aug_13_MB_SEC_Fractions",
+			"08_13_2020_MB_SEC_Fractions" };
 
 	// public static final String[] projectsNames = { //
 	//
@@ -120,7 +121,7 @@ public class ProteinComplexAnalyzer {
 	/*****************************/
 	/** DOWNLOAD FILES **/
 	/*****************************/
-	private static final boolean downloadFiles = false;
+	private static final boolean downloadFiles = true;
 
 	/*****************************/
 	/**
@@ -128,10 +129,28 @@ public class ProteinComplexAnalyzer {
 	 * this. The rest of DTASelect in an experiment, will be deleted and ignored.
 	 *****************************/
 //	private final String databaseRequirement = "Mus_musculus_reviewed_";
-	private final String databaseRequirement = "Uniprot_human_reviewed";
+//	private final String databaseRequirement = "Uniprot_human_reviewed";
+	private final String databaseRequirement = "UniProt_Human_reviewed_contaminant_05-22-2020_reversed"; // this
+																											// database
+																											// is
+																											// specific
+																											// for beta
+																											// cells
+																											// experiment
+																											// with
+																											// latest
+																											// human
+																											// database
+																											// which may
+																											// solve the
+																											// mixed
+																											// species
+																											// problem
+
 //	private final String databaseRequirement = "Rattus_norvegicus";
+
 	// ** just grab the latest search on each experiment **/
-	private final boolean keepOnlyLatestSearch = false;
+	private final boolean keepOnlyLatestSearch = true;
 
 	/**
 	 * REFERENCE DATABASES
